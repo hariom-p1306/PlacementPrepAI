@@ -18,6 +18,7 @@ export default function Navbar() {
     router.push(path);
     setMenuOpen(false);
   };
+  
 
   return (
     <div className="sticky top-0 z-50 bg-gray-900/90 backdrop-blur-md text-white border-b border-gray-700">
