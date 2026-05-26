@@ -35,6 +35,9 @@ const [dsaDifficulty, setDsaDifficulty] = useState("Easy");
   const [isListening, setIsListening] = useState(false);
   const [runLoading, setRunLoading] = useState(false);
   const [runOutput, setRunOutput] = useState("");
+  const [leftWidth, setLeftWidth] = useState(50);
+const [editorHeight, setEditorHeight] = useState(280);
+const [isDragging, setIsDragging] = useState(false);
 
   // Split AI-generated DSA question into:
   // 1. visible question
@@ -289,10 +292,35 @@ const [dsaDifficulty, setDsaDifficulty] = useState("Easy");
     return <div className="text-white p-6">Loading...</div>;
   }
 
-  return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
-        {/* Left Panel - Question */}
+  const handleMouseDown = () => {
+  setIsDragging(true);
+};
+
+const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  if (!isDragging) return;
+
+  const container = e.currentTarget.getBoundingClientRect();
+  const newLeftWidth = ((e.clientX - container.left) / container.width) * 100;
+
+  if (newLeftWidth >= 35 && newLeftWidth <= 65) {
+    setLeftWidth(newLeftWidth);
+  }
+};
+
+const handleMouseUp = () => {
+  setIsDragging(false);
+};
+
+return (
+  <div className="min-h-screen bg-gray-950 text-white">
+    <div
+      className="flex gap-0 p-4 min-h-[calc(100vh-90px)] select-none"
+      onMouseMove={handleResizeMouseMove}
+      onMouseUp={handleResizeMouseUp}
+      onMouseLeave={handleResizeMouseUp}
+    >
+      {/* Left Panel - Question */}
+      <div style={{ width: `${leftWidth}%` }} className="pr-3">
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 h-[calc(100vh-120px)] overflow-y-auto">
           <div className="flex justify-between text-sm text-gray-400 mb-3">
             <span>
@@ -303,55 +331,55 @@ const [dsaDifficulty, setDsaDifficulty] = useState("Easy");
 
           <ProgressBar current={currentIndex + 1} total={total} />
 
-{interviewType === "DSA" && (
-  <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div>
-      <label className="block mb-2 text-sm font-medium text-gray-300">
-        Select DSA Topic
-      </label>
+          {interviewType === "DSA" && (
+            <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block mb-2 text-sm font-medium text-gray-300">
+                  Select DSA Topic
+                </label>
 
-      <select
-        value={dsaTopic}
-        onChange={(e) => setDsaTopic(e.target.value)}
-        className="w-full p-3 rounded-lg bg-black border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-      >
-        <option value="Array">Array</option>
-        <option value="String">String</option>
-        <option value="Two Pointer">Two Pointer</option>
-        <option value="HashMap">HashMap</option>
-        <option value="Stack">Stack</option>
-        <option value="Binary Search">Binary Search</option>
-        <option value="DP">DP</option>
-      </select>
-    </div>
+                <select
+                  value={dsaTopic}
+                  onChange={(e) => setDsaTopic(e.target.value)}
+                  className="w-full p-3 rounded-lg bg-black border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Array">Array</option>
+                  <option value="String">String</option>
+                  <option value="Two Pointer">Two Pointer</option>
+                  <option value="HashMap">HashMap</option>
+                  <option value="Stack">Stack</option>
+                  <option value="Binary Search">Binary Search</option>
+                  <option value="DP">DP</option>
+                </select>
+              </div>
 
-    <div>
-      <label className="block mb-2 text-sm font-medium text-gray-300">
-        Select Difficulty
-      </label>
+              <div>
+                <label className="block mb-2 text-sm font-medium text-gray-300">
+                  Select Difficulty
+                </label>
 
-      <select
-        value={dsaDifficulty}
-        onChange={(e) => setDsaDifficulty(e.target.value)}
-        className="w-full p-3 rounded-lg bg-black border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-      >
-        <option value="Easy">Easy</option>
-        <option value="Medium">Medium</option>
-      </select>
-    </div>
+                <select
+                  value={dsaDifficulty}
+                  onChange={(e) => setDsaDifficulty(e.target.value)}
+                  className="w-full p-3 rounded-lg bg-black border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Easy">Easy</option>
+                  <option value="Medium">Medium</option>
+                </select>
+              </div>
 
-    <button
-      onClick={fetchQuestion}
-      className="md:col-span-2 bg-purple-600 hover:bg-purple-700 py-3 rounded-lg cursor-pointer"
-    >
-      Generate Question
-    </button>
-  </div>
-)}
+              <button
+                onClick={fetchQuestion}
+                className="md:col-span-2 bg-purple-600 hover:bg-purple-700 py-3 rounded-lg cursor-pointer"
+              >
+                Generate Question
+              </button>
+            </div>
+          )}
 
-<h2 className="text-2xl font-bold mt-6 mb-4">
-  Interview Question
-</h2>
+          <h2 className="text-2xl font-bold mt-6 mb-4">
+            Interview Question
+          </h2>
 
           {interviewType === "DSA" ? (
             <div className="text-gray-200 leading-8 text-base whitespace-pre-wrap">
@@ -377,12 +405,44 @@ const [dsaDifficulty, setDsaDifficulty] = useState("Easy");
             </pre>
           )}
         </div>
+      </div>
 
-        {/* Right Panel - Answer / Code */}
+      {/* Middle Resizer */}
+      <div
+        onMouseDown={handleResizeMouseDown}
+        className={`w-2 cursor-col-resize rounded-full transition ${
+          isDragging ? "bg-blue-500" : "bg-gray-700 hover:bg-blue-500"
+        }`}
+        title="Drag to resize panels"
+      />
+
+      {/* Right Panel - Answer / Code */}
+      <div style={{ width: `${100 - leftWidth}%` }} className="pl-3">
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 h-[calc(100vh-120px)] overflow-y-auto">
           {interviewType === "DSA" ? (
             <>
-              <h2 className="text-xl font-bold mb-4">Code Editor</h2>
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <h2 className="text-xl font-bold">Code Editor</h2>
+
+                <div className="flex items-center gap-3 w-72">
+                  <span className="text-xs text-gray-400 whitespace-nowrap">
+                    Editor Height
+                  </span>
+
+                  <input
+                    type="range"
+                    min="240"
+                    max="650"
+                    value={editorHeight}
+                    onChange={(e) => setEditorHeight(Number(e.target.value))}
+                    className="w-full"
+                  />
+
+                  <span className="text-xs text-gray-400 w-12">
+                    {editorHeight}px
+                  </span>
+                </div>
+              </div>
 
               <textarea
                 value={input}
@@ -390,7 +450,8 @@ const [dsaDifficulty, setDsaDifficulty] = useState("Easy");
                 placeholder="Write your Java code here..."
                 spellCheck={false}
                 wrap="off"
-                className="w-full h-80 p-4 rounded-lg bg-black border border-gray-700 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                style={{ height: `${editorHeight}px` }}
+                className="w-full p-4 rounded-lg bg-black border border-gray-700 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               />
 
               {!showFeedback && (
@@ -405,7 +466,9 @@ const [dsaDifficulty, setDsaDifficulty] = useState("Easy");
 
                   {runOutput && (
                     <div className="mt-4 bg-black border border-gray-700 rounded-lg p-4">
-                      <h3 className="font-bold mb-2 text-blue-400">Run Output</h3>
+                      <h3 className="font-bold mb-2 text-blue-400">
+                        Run Output
+                      </h3>
                       <pre className="text-gray-200 whitespace-pre-wrap text-sm font-mono">
                         {runOutput}
                       </pre>
@@ -425,7 +488,6 @@ const [dsaDifficulty, setDsaDifficulty] = useState("Easy");
           ) : (
             <>
               <h2 className="text-xl font-bold mb-4">Your Answer</h2>
-
 
               <button
                 onClick={startListening}
@@ -485,5 +547,6 @@ const [dsaDifficulty, setDsaDifficulty] = useState("Easy");
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 }
