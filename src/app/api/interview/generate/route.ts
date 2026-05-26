@@ -1,18 +1,54 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
+import { DSA_QUESTIONS } from "@/data/dsaQuestions";
 
 export async function POST(req: Request) {
   try {
-    const { interviewType } = await req.json();
+    const { interviewType, topic, difficulty } = await req.json();
+
+    if (!interviewType || typeof interviewType !== "string") {
+      return NextResponse.json(
+        { error: "Interview type is required." },
+        { status: 400 }
+      );
+    }
+
+    // DSA questions come from fixed internal question bank.
+    // This keeps Run Code stable and avoids void, linked list, tree, graph issues.
+    if (interviewType === "DSA") {
+      const selectedTopic = topic || "Array";
+      const selectedDifficulty = difficulty || "Easy";
+
+      const filteredQuestions = DSA_QUESTIONS.filter(
+        (q) =>
+          q.topic === selectedTopic &&
+          q.difficulty === selectedDifficulty
+      );
+
+      if (filteredQuestions.length === 0) {
+        return NextResponse.json(
+          {
+            error: `No DSA question found for ${selectedTopic} - ${selectedDifficulty}.`,
+          },
+          { status: 404 }
+        );
+      }
+
+      const randomIndex = Math.floor(Math.random() * filteredQuestions.length);
+
+      return NextResponse.json({
+        question: filteredQuestions[randomIndex].question,
+      });
+    }
 
     const response = await axios.post(
       "https://api.groq.com/openai/v1/chat/completions",
       {
         model: "llama-3.1-8b-instant",
         messages: [
-       {
-  role: "system",
- content: `
+          {
+            role: "system",
+            content: `
 You are a professional software engineering interviewer for placement preparation.
 
 Interview Type: ${interviewType}
@@ -20,84 +56,44 @@ Interview Type: ${interviewType}
 Your task is to generate ONLY ONE interview question based on the Interview Type.
 
 GENERAL RULES:
-- Beginner to medium level only
-- Question should feel like a real fresher placement interview question
-- Do NOT give answer
-- Do NOT give hints
-- Do NOT give explanation outside the required format
-- Do NOT use markdown tables
-- Do NOT use bullet points unless constraints require it
-- Return clean plain text only
+- Beginner to medium level only.
+- Question should feel like a real fresher placement interview question.
+- Do NOT give answer.
+- Do NOT give hints.
+- Do NOT use markdown tables.
+- Do NOT use markdown code fences.
+- Return clean plain text only.
 
 FOR HR:
 Return only one short HR question.
+
 Example:
 Tell me about yourself.
 
 FOR DBMS:
 Return only one short DBMS question.
 Topics: Normalization, Joins, Primary Key, Foreign Key, Indexing, Transactions, ACID properties.
+
 Example:
 What is normalization in DBMS?
 
 FOR OOPS:
 Return only one short OOPS question.
 Topics: Inheritance, Polymorphism, Encapsulation, Abstraction, Interface vs Abstract Class, Constructor, Overloading, Overriding.
+
 Example:
 What is polymorphism in OOPS?
 
-FOR DSA:
-Generate one LeetCode-style coding problem.
-
-DSA OUTPUT FORMAT MUST BE EXACTLY LIKE THIS:
-
-Title: <Problem Title>
-
-Difficulty: <Easy or Medium>
-
-Problem:
-<Write a clear problem statement in 2-4 lines.>
-
-Example 1:
-Input: <sample input>
-Output: <sample output>
-Explanation: <short explanation>
-
-Example 2:
-Input: <sample input>
-Output: <sample output>
-Explanation: <short explanation>
-
-Constraints:
-<write constraints in separate lines>
-
-Function Signature:
-Java:
-class Solution {
-    public <returnType> <functionName>(<parameters>) {
-        
-    }
-}
-
-DSA TOPICS:
-Array, String, HashMap, Stack, Queue, Two Pointers, Sliding Window, Binary Search, Linked List, Tree, Graph, Basic DP.
-
-IMPORTANT FOR DSA:
-- Add a blank line after Title, Difficulty, Problem, each Example, Constraints, and Function Signature.
-- Use proper line breaks between each section
-- Do not write everything in one paragraph
-- Do not include hints
-- Do not include solution
-- Do not include markdown code fences
-- Function signature must be Java only
-- Return only the structured problem text
+IMPORTANT:
+If Interview Type is not HR, DBMS, or OOPS, return one simple placement interview question related to that type.
 `,
-       },
+          },
           {
             role: "user",
             content: `Generate one simple ${interviewType} interview question.`,
           },
         ],
+        temperature: 0.5,
       },
       {
         headers: {
