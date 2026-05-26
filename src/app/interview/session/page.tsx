@@ -27,27 +27,78 @@ export default function SessionPage() {
   const [question, setQuestion] = useState("");
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  // const [running, setRunning] = useState(false);
+  const [dsaTopic, setDsaTopic] = useState("Array");
+const [dsaDifficulty, setDsaDifficulty] = useState("Easy");
+
   const [showFeedback, setShowFeedback] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [runLoading, setRunLoading] = useState(false);
+  const [runOutput, setRunOutput] = useState("");
 
-  const questionParts = question.split("Function Signature:");
-  const questionText = questionParts[0];
-  const functionSignature = questionParts[1];
+  // Split AI-generated DSA question into:
+  // 1. visible question
+  // 2. visible function signature
+  // 3. hidden runner code
+  const runnerParts = question.split("Runner Code:");
+  const questionWithoutRunner = runnerParts[0]?.trim() || "";
+  const runnerCode = runnerParts[1]?.trim() || "";
+
+  const questionParts = questionWithoutRunner.split("Function Signature:");
+  const questionText = questionParts[0]?.trim() || "";
+  const functionSignature = questionParts[1]?.trim() || "";
+
+  const extractStarterCode = (signature: string) => {
+    if (!signature) return "";
+
+    return signature.replace(/^Java:\s*/i, "").trim();
+  };
 
   const fetchQuestion = async () => {
     try {
+      setQuestion("");
+      setRunOutput("");
+
       const res = await fetch("/api/interview/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ interviewType }),
+        body: JSON.stringify({
+  interviewType,
+  topic: dsaTopic,
+  difficulty: dsaDifficulty,
+}),
       });
 
       const data = await res.json();
-      setQuestion(data.question);
+
+      if (!res.ok) {
+        console.error("Question generation failed:", data);
+        setQuestion("Failed to generate question. Please try again.");
+        return;
+      }
+
+      const generatedQuestion = data.question || "";
+      setQuestion(generatedQuestion);
+
+      // Put function signature automatically inside code editor for DSA
+      if (interviewType === "DSA") {
+        const generatedRunnerParts = generatedQuestion.split("Runner Code:");
+        const generatedQuestionWithoutRunner = generatedRunnerParts[0] || "";
+
+        const generatedQuestionParts =
+          generatedQuestionWithoutRunner.split("Function Signature:");
+
+        const generatedFunctionSignature =
+          generatedQuestionParts[1]?.trim() || "";
+
+        const starterCode = extractStarterCode(generatedFunctionSignature);
+        setInput(starterCode);
+      }
     } catch (error) {
-      console.error("Error fetching question", error);
+      console.error("Error fetching question:", error);
+      setQuestion("Something went wrong while generating the question.");
     }
   };
 
@@ -59,7 +110,7 @@ export default function SessionPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          question,
+          question: questionWithoutRunner || question,
           answer: input,
           interviewType,
         }),
@@ -67,10 +118,15 @@ export default function SessionPage() {
 
       const data = await res.json();
 
+      if (!res.ok) {
+        console.error("Evaluation failed:", data);
+        return;
+      }
+
       addFeedback(data);
       setShowFeedback(true);
     } catch (error) {
-      console.error("Evaluation error", error);
+      console.error("Evaluation error:", error);
     }
   };
 
@@ -82,10 +138,59 @@ export default function SessionPage() {
     setLoading(false);
   };
 
+
+  // const handleRunCode = async () => {
+  //   if (!input.trim()) return;
+
+  //   if (!runnerCode) {
+  //     setRunOutput(
+  //       Error instanceof Error
+  //         ? Error.message
+  //         : "Something went wrong while running the code."
+  //     );
+  //     return;
+  //   }
+
+  //   setRunning(true);
+  //   setRunOutput("");
+
+  //   try {
+  //     const res = await fetch("/api/interview/run-code", {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //       },
+  //       body: JSON.stringify({
+  //         code: input,
+  //         runnerCode,
+  //         language: "java",
+  //         stdin: "",
+  //       }),
+  //     });
+
+  //     const data = await res.json();
+  //     if (!res.ok) {
+  //       setRunOutput(data.error || data.details || "Code execution failed.");
+  //       return;
+  //     }
+
+  //     setRunOutput(data.output || "Code executed successfully, but no output was produced.");
+  //   } catch (error) {
+  //     console.error("Run code error:", error);
+  //     setRunOutput("Something went wrong while running the code.");
+  //   } finally {
+  //     setRunning(false);
+  //   }
+  // };
+
+
+
   const goToNext = () => {
     const result = nextQuestion(input);
 
     setInput("");
+    setQuestion("");
+    setRunOutput("");
     setShowFeedback(false);
     resetTimer();
 
@@ -96,14 +201,49 @@ export default function SessionPage() {
     }
   };
 
-  const extractStarterCode = (text: string) => {
-  if (!text.includes("Function Signature:")) return "";
+  const handleRunCode = async () => {
+    if (!input.trim()) {
+      setRunOutput("Please write your Java code first.");
+      return;
+    }
 
-  return text
-    .split("Function Signature:")[1]
-    .trim()
-    .replace(/^Java:\s*/i, "");
-};
+    if (!runnerCode) {
+      setRunOutput(
+        "Runner code is missing for this question. Please generate a new DSA question."
+      );
+      return;
+    }
+
+    try {
+      setRunLoading(true);
+      setRunOutput("Running your code...");
+
+      const res = await fetch("/api/interview/run-code", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          code: input,
+          runnerCode,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setRunOutput(data?.error || "Something went wrong while running code.");
+        return;
+      }
+
+      setRunOutput(data?.output || "Code executed, but no output was produced.");
+    } catch (error: any) {
+      console.error("Run code error:", error);
+      setRunOutput("Something went wrong while running the code.");
+    } finally {
+      setRunLoading(false);
+    }
+  };
 
   const startListening = () => {
     const SpeechRecognition =
@@ -114,8 +254,6 @@ export default function SessionPage() {
       alert("Speech Recognition not supported in your browser");
       return;
     }
-
-
 
     const recognition = new SpeechRecognition();
 
@@ -135,11 +273,9 @@ export default function SessionPage() {
     };
   };
 
-
   useEffect(() => {
     if (_hasHydrated) {
       fetchQuestion();
-      
     }
   }, [_hasHydrated]);
 
@@ -167,9 +303,55 @@ export default function SessionPage() {
 
           <ProgressBar current={currentIndex + 1} total={total} />
 
-          <h2 className="text-2xl font-bold mt-6 mb-4">
-            Interview Question
-          </h2>
+{interviewType === "DSA" && (
+  <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
+      <label className="block mb-2 text-sm font-medium text-gray-300">
+        Select DSA Topic
+      </label>
+
+      <select
+        value={dsaTopic}
+        onChange={(e) => setDsaTopic(e.target.value)}
+        className="w-full p-3 rounded-lg bg-black border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <option value="Array">Array</option>
+        <option value="String">String</option>
+        <option value="Two Pointer">Two Pointer</option>
+        <option value="HashMap">HashMap</option>
+        <option value="Stack">Stack</option>
+        <option value="Binary Search">Binary Search</option>
+        <option value="DP">DP</option>
+      </select>
+    </div>
+
+    <div>
+      <label className="block mb-2 text-sm font-medium text-gray-300">
+        Select Difficulty
+      </label>
+
+      <select
+        value={dsaDifficulty}
+        onChange={(e) => setDsaDifficulty(e.target.value)}
+        className="w-full p-3 rounded-lg bg-black border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <option value="Easy">Easy</option>
+        <option value="Medium">Medium</option>
+      </select>
+    </div>
+
+    <button
+      onClick={fetchQuestion}
+      className="md:col-span-2 bg-purple-600 hover:bg-purple-700 py-3 rounded-lg cursor-pointer"
+    >
+      Generate Question
+    </button>
+  </div>
+)}
+
+<h2 className="text-2xl font-bold mt-6 mb-4">
+  Interview Question
+</h2>
 
           {interviewType === "DSA" ? (
             <div className="text-gray-200 leading-8 text-base whitespace-pre-wrap">
@@ -184,7 +366,7 @@ export default function SessionPage() {
                   </h3>
 
                   <pre className="bg-black border border-gray-700 rounded-xl p-4 text-sm font-mono text-green-300 overflow-x-auto whitespace-pre-wrap">
-                    {functionSignature.trim()}
+                    {functionSignature.replace(/^Java:\s*/i, "").trim()}
                   </pre>
                 </div>
               )}
@@ -206,29 +388,44 @@ export default function SessionPage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Write your Java code here..."
+                spellCheck={false}
+                wrap="off"
                 className="w-full h-80 p-4 rounded-lg bg-black border border-gray-700 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
 
               {!showFeedback && (
-                <button
-                  onClick={handleSubmit}
-                  disabled={loading}
-                  className="mt-4 w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg cursor-pointer disabled:opacity-60"
-                >
-                  {loading ? "Reviewing Code..." : "Submit Code for AI Review"}
-                </button>
+                <>
+                  <button
+                    onClick={handleRunCode}
+                    disabled={runLoading || !input.trim()}
+                    className="mt-4 w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg cursor-pointer disabled:opacity-60"
+                  >
+                    {runLoading ? "Running Code..." : "Run Code"}
+                  </button>
+
+                  {runOutput && (
+                    <div className="mt-4 bg-black border border-gray-700 rounded-lg p-4">
+                      <h3 className="font-bold mb-2 text-blue-400">Run Output</h3>
+                      <pre className="text-gray-200 whitespace-pre-wrap text-sm font-mono">
+                        {runOutput}
+                      </pre>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleSubmit}
+                    disabled={loading}
+                    className="mt-4 w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg cursor-pointer disabled:opacity-60"
+                  >
+                    {loading ? "Reviewing Code..." : "Submit Code for AI Review"}
+                  </button>
+                </>
               )}
             </>
           ) : (
             <>
               <h2 className="text-xl font-bold mb-4">Your Answer</h2>
 
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Type your answer here..."
-                className="w-full h-64 p-4 rounded-lg bg-gray-950 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
 
               <button
                 onClick={startListening}
