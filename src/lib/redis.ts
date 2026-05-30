@@ -7,10 +7,6 @@ declare global {
   var redisClient: Redis | undefined;
 }
 
-if (!redisUrl) {
-  console.warn("REDIS_URL is not defined. Redis features will be disabled.");
-}
-
 export const redis =
   global.redisClient ||
   new Redis(redisUrl || "redis://localhost:6379", {
