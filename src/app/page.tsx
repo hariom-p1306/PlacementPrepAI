@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { SignInButton, useUser } from "@clerk/nextjs";
-import { motion } from "framer-motion";
+// import { motion } from "framer-motion";
 
 export default function Home() {
   const router = useRouter();

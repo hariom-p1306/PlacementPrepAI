@@ -1,21 +1,4 @@
 services:
-  app:
-    build: .
-    container_name: placementprep-ai-app
-    ports:
-      - "3000:3000"
-    volumes:
-      - .:/app
-      - /app/node_modules
-    env_file:
-      - .env.local
-    environment:
-      - NODE_ENV=development
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      - redis
-    command: npm run dev
-
   redis:
     image: redis:7-alpine
     container_name: placementprep-ai-redis
@@ -24,5 +7,18 @@ services:
     volumes:
       - redis-data:/data
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: placementprep-ai-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: placementprep_ai
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
 volumes:
   redis-data:
+  postgres-data:
