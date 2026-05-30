@@ -1,19 +1,25 @@
 import Redis from "ioredis";
 
-const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+const redisUrl = process.env.REDIS_URL;
 
 declare global {
   // eslint-disable-next-line no-var
   var redisClient: Redis | undefined;
 }
 
+if (!redisUrl) {
+  console.warn("REDIS_URL is not defined. Redis features will be disabled.");
+}
+
 export const redis =
   global.redisClient ||
-  new Redis(redisUrl, {
-    maxRetriesPerRequest: 3,
+  new Redis(redisUrl || "redis://localhost:6379", {
+    maxRetriesPerRequest: 1,
+    enableReadyCheck: false,
+    lazyConnect: true,
     retryStrategy(times) {
-      const delay = Math.min(times * 100, 3000);
-      return delay;
+      if (times > 2) return null;
+      return Math.min(times * 100, 1000);
     },
   });
 
@@ -26,5 +32,5 @@ redis.on("connect", () => {
 });
 
 redis.on("error", (error) => {
-  console.error("Redis connection error:", error);
+  console.error("Redis connection error:", error.message);
 });
