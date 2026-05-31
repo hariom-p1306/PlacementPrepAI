@@ -1,13 +1,27 @@
 import { NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
+import { safeRedis } from "@/lib/redis";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
-  await redis.set("placementprep-test", "Redis is working in PlacementPrep-AI");
+  const result = await safeRedis(
+    async (redis) => {
+      await redis.set("placementprep-test", "Redis is working in PlacementPrep AI");
+      const value = await redis.get("placementprep-test");
 
-  const value = await redis.get("placementprep-test");
+      return {
+        success: true,
+        message: "Redis connected successfully",
+        value,
+      };
+    },
+    {
+      success: false,
+      message: "Redis connection failed",
+      value: null,
+    }
+  );
 
-  return NextResponse.json({
-    success: true,
-    message: value,
-  });
+  return NextResponse.json(result);
 }
