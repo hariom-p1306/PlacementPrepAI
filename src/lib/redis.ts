@@ -7,17 +7,25 @@ declare global {
   var redisClient: Redis | undefined;
 }
 
-export const redis =
-  global.redisClient ||
-  new Redis(redisUrl || "redis://localhost:6379", {
-    maxRetriesPerRequest: 1,
+function createRedisClient() {
+  if (!redisUrl) {
+    console.warn("REDIS_URL is not defined. Redis will use local fallback.");
+  }
+
+  return new Redis(redisUrl || "redis://localhost:6379", {
+    maxRetriesPerRequest: null,
     enableReadyCheck: false,
     lazyConnect: true,
+    connectTimeout: 10000,
+
     retryStrategy(times) {
       if (times > 2) return null;
-      return Math.min(times * 100, 1000);
+      return Math.min(times * 200, 1000);
     },
   });
+}
+
+export const redis = global.redisClient || createRedisClient();
 
 if (process.env.NODE_ENV !== "production") {
   global.redisClient = redis;

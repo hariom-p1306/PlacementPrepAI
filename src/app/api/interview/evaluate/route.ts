@@ -3,6 +3,8 @@ import axios from "axios";
 import { saveInterviewProgress } from "@/lib/progress";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 type InterviewEvaluationResult = {
   score: number;
@@ -47,13 +49,17 @@ function normalizeResult(parsed: any): InterviewEvaluationResult {
   };
 }
 
-function getFallbackResult(reason: string): InterviewEvaluationResult {
+function getFallbackResult(reason = "AI evaluation took too long."): InterviewEvaluationResult {
   return {
     score: 0,
     strengths: [],
     weaknesses: [reason],
-    improvement_tips: ["Try answering more clearly and include key concepts."],
-    ideal_answer: "",
+    improvement_tips: [
+      "Try giving a clearer answer with definition, explanation, and one example.",
+      "Mention important keywords related to the question.",
+    ],
+    ideal_answer:
+      "A good answer should clearly define the concept, explain its purpose, and include a simple example.",
   };
 }
 
@@ -75,9 +81,18 @@ async function safelySaveInterviewProgress({
       weaknesses: result.weaknesses,
       improvement_tips: result.improvement_tips,
     });
-  } catch (error) {
-    console.error("REDIS SAVE INTERVIEW ERROR:", error);
+  } catch (error: any) {
+    console.error("REDIS SAVE INTERVIEW ERROR:", error?.message || error);
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("AI evaluation timeout")), ms)
+    ),
+  ]);
 }
 
 export async function POST(req: Request) {
@@ -99,13 +114,18 @@ export async function POST(req: Request) {
     }
 
     if (!answer || typeof answer !== "string") {
-      return NextResponse.json(
-        { error: "Answer is required." },
-        { status: 400 }
-      );
+      const fallbackResult = getFallbackResult("Answer is empty.");
+
+      void safelySaveInterviewProgress({
+        interviewType,
+        question,
+        result: fallbackResult,
+      });
+
+      return NextResponse.json(fallbackResult, { status: 200 });
     }
 
-    const response = await axios.post(
+    const groqRequest = axios.post(
       "https://api.groq.com/openai/v1/chat/completions",
       {
         model: "llama-3.1-8b-instant",
@@ -138,7 +158,8 @@ Rules:
 - Be strict but fair.
 - If the answer is irrelevant, give low score.
 - If the answer is incomplete, mention what is missing.
-- For DBMS, check correctness of concepts like keys, joins, normalization, ACID, transactions.
+- Keep response concise.
+- For DBMS, check correctness of keys, joins, normalization, ACID, transactions, indexing.
 - For OOPS, check class/object, inheritance, polymorphism, abstraction, encapsulation, overloading, overriding.
 - For HR, check clarity, confidence, structure, honesty, and professionalism.
 - For DSA, check approach, complexity, correctness, edge cases, and code quality.
@@ -159,14 +180,18 @@ ${answer}
           },
         ],
         temperature: 0.2,
+        max_tokens: 700,
       },
       {
         headers: {
           Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
           "Content-Type": "application/json",
         },
+        timeout: 15000,
       }
     );
+
+    const response: any = await withTimeout(groqRequest, 18000);
 
     const aiContent = response.data.choices[0].message.content;
     const jsonText = extractJson(aiContent);
@@ -174,21 +199,26 @@ ${answer}
 
     const finalResult = normalizeResult(parsed);
 
-    await safelySaveInterviewProgress({
+    // Important: do not block user response for Redis save
+    void safelySaveInterviewProgress({
       interviewType,
       question,
       result: finalResult,
     });
 
-    return NextResponse.json(finalResult);
+    return NextResponse.json(finalResult, { status: 200 });
   } catch (error: any) {
-    console.error("❌ INTERVIEW EVALUATE ERROR:", error.response?.data || error.message);
-
-    const fallbackResult = getFallbackResult(
-      error.message || "Server error occurred"
+    console.error(
+      "INTERVIEW EVALUATE ERROR:",
+      error.response?.data || error.message
     );
 
-    await safelySaveInterviewProgress({
+    const fallbackResult = getFallbackResult(
+      error.message || "Server error occurred."
+    );
+
+    // Important: background save only
+    void safelySaveInterviewProgress({
       interviewType,
       question,
       result: fallbackResult,
