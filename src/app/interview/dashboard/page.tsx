@@ -76,11 +76,18 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   const fetchDashboard = async () => {
+    const controller = new AbortController();
+
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, 7000);
+
     try {
       setLoading(true);
 
       const res = await fetch("/api/dashboard", {
         cache: "no-store",
+        signal: controller.signal,
       });
 
       const data = await res.json();
@@ -95,10 +102,16 @@ export default function DashboardPage() {
         ...fallbackData,
         ...data,
       });
-    } catch (error) {
-      console.error("Dashboard fetch error:", error);
+    } catch (error: any) {
+      if (error?.name === "AbortError") {
+        console.error("Dashboard request timed out");
+      } else {
+        console.error("Dashboard fetch error:", error);
+      }
+
       setDashboard(fallbackData);
     } finally {
+      clearTimeout(timeout);
       setLoading(false);
     }
   };
@@ -335,11 +348,10 @@ export default function DashboardPage() {
             {getLastSixDays().map((day) => (
               <div key={day.label} className="flex flex-col items-center gap-2">
                 <div
-                  className={`h-10 w-10 rounded-full border flex items-center justify-center ${
-                    day.active
-                      ? "bg-green-500/20 border-green-500 text-green-400"
-                      : "bg-gray-800 border-gray-700 text-gray-500"
-                  }`}
+                  className={`h-10 w-10 rounded-full border flex items-center justify-center ${day.active
+                    ? "bg-green-500/20 border-green-500 text-green-400"
+                    : "bg-gray-800 border-gray-700 text-gray-500"
+                    }`}
                 >
                   {day.active ? "✓" : "•"}
                 </div>
@@ -467,9 +479,8 @@ function StatCard({ item }: { item: any }) {
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 flex items-center justify-between gap-4">
       <div
-        className={`h-16 w-16 rounded-2xl border flex items-center justify-center text-2xl ${
-          colorMap[item.color]
-        }`}
+        className={`h-16 w-16 rounded-2xl border flex items-center justify-center text-2xl ${colorMap[item.color]
+          }`}
       >
         {item.icon}
       </div>

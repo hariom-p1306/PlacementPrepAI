@@ -1,4 +1,4 @@
-import { redis } from "@/lib/redis";
+import { safeRedis } from "@/lib/redis";
 
 const USER_ID = "demo-user";
 
@@ -29,55 +29,89 @@ export type InterviewProgressPayload = {
   question?: string;
 };
 
+type ResumeProgressItem = ResumeProgressPayload & {
+  type: "RESUME_ANALYSIS";
+  createdAt: string;
+};
+
+type InterviewProgressItem = InterviewProgressPayload & {
+  type: "INTERVIEW";
+  createdAt: string;
+};
+
+function safeParseJson<T>(item: string): T | null {
+  try {
+    return JSON.parse(item) as T;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((item) => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export async function saveResumeProgress(data: ResumeProgressPayload) {
-  const payload = {
+  const payload: ResumeProgressItem = {
     type: "RESUME_ANALYSIS",
     ...data,
     createdAt: new Date().toISOString(),
   };
 
-  await redis.lpush(keys.resumeResults, JSON.stringify(payload));
-  await redis.ltrim(keys.resumeResults, 0, 49);
+  await safeRedis(
+    async (redis) => {
+      await redis.lpush(keys.resumeResults, JSON.stringify(payload));
+      await redis.ltrim(keys.resumeResults, 0, 49);
+      return true;
+    },
+    false
+  );
 
   return payload;
 }
 
 export async function saveInterviewProgress(data: InterviewProgressPayload) {
-  const payload = {
+  const payload: InterviewProgressItem = {
     type: "INTERVIEW",
     ...data,
     createdAt: new Date().toISOString(),
   };
 
-  await redis.lpush(keys.interviewResults, JSON.stringify(payload));
-  await redis.ltrim(keys.interviewResults, 0, 99);
+  await safeRedis(
+    async (redis) => {
+      await redis.lpush(keys.interviewResults, JSON.stringify(payload));
+      await redis.ltrim(keys.interviewResults, 0, 99);
+      return true;
+    },
+    false
+  );
 
   return payload;
 }
 
 export async function getDashboardProgress() {
-  const resumeRaw = await redis.lrange(keys.resumeResults, 0, 49);
-  const interviewRaw = await redis.lrange(keys.interviewResults, 0, 99);
+  const resumeRaw = await safeRedis(
+    async (redis) => redis.lrange(keys.resumeResults, 0, 49),
+    [] as string[]
+  );
+
+  const interviewRaw = await safeRedis(
+    async (redis) => redis.lrange(keys.interviewResults, 0, 99),
+    [] as string[]
+  );
 
   const resumeResults = resumeRaw
-    .map((item) => {
-      try {
-        return JSON.parse(item);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
+    .map((item) => safeParseJson<ResumeProgressItem>(item))
+    .filter((item): item is ResumeProgressItem => Boolean(item));
 
   const interviewResults = interviewRaw
-    .map((item) => {
-      try {
-        return JSON.parse(item);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
+    .map((item) => safeParseJson<InterviewProgressItem>(item))
+    .filter((item): item is InterviewProgressItem => Boolean(item));
 
   const totalInterviews = interviewResults.length;
 
@@ -94,28 +128,28 @@ export async function getDashboardProgress() {
       : 0;
 
   const dsaSolved = interviewResults.filter(
-    (item) => item.interviewType === "DSA"
+    (item) => String(item.interviewType || "").toLowerCase() === "dsa"
   ).length;
 
-  const latestResume = resumeResults[0];
+  const latestResume = resumeResults[0] || null;
 
-  const resumeAtsScore = latestResume?.ats_score || 0;
+  const resumeAtsScore = Number(latestResume?.ats_score || 0);
 
   const weakAreaMap: Record<string, number> = {};
 
   interviewResults.forEach((item) => {
-    const weaknesses = item.weaknesses || [];
+    const weaknesses = normalizeArray(item.weaknesses);
 
-    weaknesses.forEach((weakness: string) => {
+    weaknesses.forEach((weakness) => {
       const key = normalizeWeakArea(weakness);
       weakAreaMap[key] = (weakAreaMap[key] || 0) + 1;
     });
   });
 
   resumeResults.forEach((item) => {
-    const missingSkills = item.missing_skills || [];
+    const missingSkills = normalizeArray(item.missing_skills);
 
-    missingSkills.forEach((skill: string) => {
+    missingSkills.forEach((skill) => {
       const key = normalizeWeakArea(skill);
       weakAreaMap[key] = (weakAreaMap[key] || 0) + 1;
     });
@@ -132,24 +166,22 @@ export async function getDashboardProgress() {
 
   const recentActivity = [
     ...interviewResults.map((item) => ({
-      title: `${item.interviewType} Interview`,
+      title: `${item.interviewType || "General"} Interview`,
       subtitle: item.question || "Practice session",
       score: `${item.score || 0}/10`,
       date: item.createdAt,
-      type: "INTERVIEW",
+      type: "INTERVIEW" as const,
     })),
+
     ...resumeResults.map((item) => ({
       title: "Resume Analysis",
       subtitle: item.targetRole || "Resume feedback",
       score: `${item.ats_score || 0}%`,
       date: item.createdAt,
-      type: "RESUME_ANALYSIS",
+      type: "RESUME_ANALYSIS" as const,
     })),
   ]
-    .sort(
-      (a, b) =>
-        new Date(b.date).getTime() - new Date(a.date).getTime()
-    )
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 6);
 
   return {
@@ -171,8 +203,9 @@ function normalizeWeakArea(text: string) {
   if (value.includes("dp") || value.includes("dynamic")) return "DP";
   if (value.includes("oops") || value.includes("object")) return "OOPS";
   if (value.includes("dbms") || value.includes("sql")) return "DBMS";
-  if (value.includes("communication") || value.includes("english"))
+  if (value.includes("communication") || value.includes("english")) {
     return "Communication";
+  }
   if (value.includes("docker")) return "Docker";
   if (value.includes("cloud") || value.includes("aws")) return "Cloud";
   if (value.includes("testing")) return "Testing";
