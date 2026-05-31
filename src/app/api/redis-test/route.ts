@@ -7,7 +7,11 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const result = await safeRedis(
     async (redis) => {
-      await redis.set("placementprep-test", "Redis is working in PlacementPrep AI");
+      await redis.set(
+        "placementprep-test",
+        "Redis is working in PlacementPrep AI"
+      );
+
       const value = await redis.get("placementprep-test");
 
       return {
