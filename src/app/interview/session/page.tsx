@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useInterviewStore } from "@/features/interview/interview.store";
 import { ProgressBar } from "@/components/interview/ProgressBar";
@@ -63,9 +63,16 @@ export default function SessionPage() {
   const currentFeedback = feedbacks[currentIndex];
 
   const [config, setConfig] = useState<InterviewConfig>(defaultConfig);
+  const [isConfigReady, setIsConfigReady] = useState(false);
   const [question, setQuestion] = useState("");
   const [input, setInput] = useState("");
+
   const [loading, setLoading] = useState(false);
+
+  const [sessionId, setSessionId] = useState("");
+
+  const isFetchingQuestionRef = useRef(false);
+  const lastFetchKeyRef = useRef("");
 
   const [showFeedback, setShowFeedback] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -143,8 +150,21 @@ How it is used in programming:`;
     return "Write your answer here...";
   };
 
-  const fetchQuestion = async () => {
+  const fetchQuestion = async (forceNew = false) => {
+    const fetchKey = `${activeInterviewType}-${activeTopic}-${activeDifficulty}-${currentIndex}`;
+
+    if (!forceNew && lastFetchKeyRef.current === fetchKey) {
+      return;
+    }
+
+    if (isFetchingQuestionRef.current) {
+      return;
+    }
+
     try {
+      isFetchingQuestionRef.current = true;
+      lastFetchKeyRef.current = fetchKey;
+
       setQuestion("");
       setRunOutput("");
       setShowFeedback(false);
@@ -169,6 +189,8 @@ How it is used in programming:`;
         return;
       }
 
+      setSessionId(data.sessionId || "");
+
       const generatedQuestion = data.question || "";
       setQuestion(generatedQuestion);
 
@@ -190,6 +212,8 @@ How it is used in programming:`;
     } catch (error) {
       console.error("Error fetching question:", error);
       setQuestion("Something went wrong while generating the question.");
+    } finally {
+      isFetchingQuestionRef.current = false;
     }
   };
 
@@ -201,6 +225,7 @@ How it is used in programming:`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          sessionId,
           question: questionWithoutRunner || question,
           answer: input,
           interviewType: activeInterviewType,
@@ -226,6 +251,11 @@ How it is used in programming:`;
   const handleSubmit = async () => {
     if (!input.trim()) return;
 
+    if (!sessionId) {
+      console.error("Session ID missing. Please generate a question again.");
+      return;
+    }
+
     setLoading(true);
     await evaluateAnswer();
     setLoading(false);
@@ -238,12 +268,13 @@ How it is used in programming:`;
     setQuestion("");
     setRunOutput("");
     setShowFeedback(false);
+    setSessionId("");
     resetTimer();
 
     if (result === "COMPLETED") {
       router.push("/interview/result");
     } else {
-      fetchQuestion();
+      fetchQuestion(true);
     }
   };
 
@@ -254,12 +285,13 @@ How it is used in programming:`;
     setQuestion("");
     setRunOutput("");
     setShowFeedback(false);
+    setSessionId("");
     resetTimer();
 
     if (result === "COMPLETED") {
       router.push("/interview/result");
     } else {
-      fetchQuestion();
+      fetchQuestion(true);
     }
   };
 
@@ -344,43 +376,43 @@ How it is used in programming:`;
     };
   };
 
-  useEffect(() => {
-    if (!_hasHydrated) return;
+ useEffect(() => {
+  if (!_hasHydrated) return;
 
-    const savedConfig = localStorage.getItem("interviewConfig");
+  const savedConfig = localStorage.getItem("interviewConfig");
 
-    if (savedConfig) {
-      try {
-        const parsed = JSON.parse(savedConfig);
+  if (savedConfig) {
+    try {
+      const parsed = JSON.parse(savedConfig);
 
-        setConfig({
-          interviewType:
-            parsed.interviewType || interviewType || defaultConfig.interviewType,
-          topic: parsed.topic || defaultConfig.topic,
-          difficulty: parsed.difficulty || defaultConfig.difficulty,
-        });
-      } catch {
-        setConfig({
-          interviewType: interviewType || defaultConfig.interviewType,
-          topic: defaultConfig.topic,
-          difficulty: defaultConfig.difficulty,
-        });
-      }
-    } else {
       setConfig({
-        interviewType: interviewType || defaultConfig.interviewType,
-        topic: defaultConfig.topic,
-        difficulty: defaultConfig.difficulty,
+        interviewType: parsed.interviewType || defaultConfig.interviewType,
+        topic: parsed.topic || defaultConfig.topic,
+        difficulty: parsed.difficulty || defaultConfig.difficulty,
       });
+    } catch {
+      setConfig(defaultConfig);
     }
-  }, [_hasHydrated, interviewType]);
+  } else {
+    setConfig(defaultConfig);
+  }
+
+  lastFetchKeyRef.current = "";
+  setIsConfigReady(true);
+}, [_hasHydrated]);
 
   useEffect(() => {
-    if (_hasHydrated && config.interviewType) {
-      fetchQuestion();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [_hasHydrated, config.interviewType, config.topic, config.difficulty]);
+  if (_hasHydrated && isConfigReady && config.interviewType) {
+    fetchQuestion();
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [
+  _hasHydrated,
+  isConfigReady,
+  config.interviewType,
+  config.topic,
+  config.difficulty,
+]);
 
   useEffect(() => {
     if (timeLeft === 0 && !showFeedback && input.trim()) {
@@ -389,10 +421,9 @@ How it is used in programming:`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft]);
 
-  if (!_hasHydrated) {
-    return <div className="text-white p-6">Loading...</div>;
-  }
-
+  if (!_hasHydrated || !isConfigReady) {
+  return <div className="text-white p-6">Loading...</div>;
+}
   const handleResizeMouseDown = () => {
     setIsDragging(true);
   };
@@ -502,9 +533,8 @@ How it is used in programming:`;
         {/* Middle Resizer */}
         <div
           onMouseDown={handleResizeMouseDown}
-          className={`w-2 cursor-col-resize rounded-full transition ${
-            isDragging ? "bg-blue-500" : "bg-gray-700 hover:bg-blue-500"
-          }`}
+          className={`w-2 cursor-col-resize rounded-full transition ${isDragging ? "bg-blue-500" : "bg-gray-700 hover:bg-blue-500"
+            }`}
           title="Drag to resize panels"
         />
 

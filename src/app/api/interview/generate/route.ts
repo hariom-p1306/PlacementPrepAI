@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
 import { DSA_QUESTIONS } from "@/data/dsaQuestions";
+import { getCurrentDbUser } from "@/lib/user";
+import {
+  createInterviewSession,
+  getUsedQuestions,
+} from "@/lib/interview-history";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +34,6 @@ const fallbackQuestions: Record<string, Record<string, string[]>> = {
       "If you are given a task you do not know, how will you approach it?",
     ],
   },
-
   DBMS: {
     Easy: [
       "What is a primary key in DBMS?",
@@ -50,7 +54,6 @@ const fallbackQuestions: Record<string, Record<string, string[]>> = {
       "How would you handle transactions in an online payment system?",
     ],
   },
-
   OOPS: {
     Easy: [
       "What is the difference between a class and an object?",
@@ -106,10 +109,7 @@ function cleanQuestion(text: string) {
     .trim();
 }
 
-function getFallbackQuestion(
-  interviewType: string,
-  difficulty: string
-): string {
+function getFallbackQuestion(interviewType: string, difficulty: string): string {
   const questions =
     fallbackQuestions[interviewType]?.[difficulty] ||
     fallbackQuestions[interviewType]?.Easy ||
@@ -118,15 +118,50 @@ function getFallbackQuestion(
   return getRandomItem(questions);
 }
 
+function getNonRepeatedDsaQuestion({
+  topic,
+  difficulty,
+  usedQuestions,
+}: {
+  topic: string;
+  difficulty: string;
+  usedQuestions: string[];
+}) {
+  const filteredQuestions = DSA_QUESTIONS.filter(
+    (q) => q.topic === topic && q.difficulty === difficulty
+  );
+
+  if (filteredQuestions.length === 0) {
+    return null;
+  }
+
+  const freshQuestions = filteredQuestions.filter(
+    (q) => !usedQuestions.includes(q.question)
+  );
+
+  if (freshQuestions.length > 0) {
+    return getRandomItem(freshQuestions);
+  }
+
+  return getRandomItem(filteredQuestions);
+}
+
 function buildSystemPrompt({
   interviewType,
   topic,
   difficulty,
+  usedQuestions,
 }: {
   interviewType: string;
   topic: string;
   difficulty: string;
+  usedQuestions: string[];
 }) {
+  const usedQuestionText =
+    usedQuestions.length > 0
+      ? usedQuestions.map((q, index) => `${index + 1}. ${q}`).join("\n")
+      : "No previous questions.";
+
   return `
 You are a friendly and professional placement interviewer for Indian engineering students.
 
@@ -135,6 +170,14 @@ Your task is to generate ONLY ONE interview question for a fresher-level mock in
 Interview Type: ${interviewType}
 Topic: ${topic || "General"}
 Difficulty: ${difficulty}
+
+Previously asked questions for this same user/type/topic/difficulty:
+${usedQuestionText}
+
+NO-REPEAT RULE:
+- Do not generate any question that is same or very similar to previously asked questions.
+- If previous questions exist, generate a fresh question with different wording and focus.
+- Avoid repeating the same concept again if possible.
 
 STRICT OUTPUT RULES:
 - Return only one question.
@@ -146,76 +189,29 @@ STRICT OUTPUT RULES:
 - Do not use numbering.
 - Keep the question short, clear, and easy to understand.
 - The question should sound like a real campus placement interview question.
-- The question must be understandable for an average engineering student.
 
 DIFFICULTY RULES:
 If difficulty is Easy:
 - Ask basic definition-based or simple concept questions.
-- The question should be suitable for beginners.
-- Avoid deep theoretical or advanced questions.
 
 If difficulty is Medium:
 - Ask concept + explanation based questions.
-- The question should test understanding, not memorization.
-- It can include small comparison-based questions.
 
 If difficulty is Hard:
 - Ask scenario-based or application-based questions.
 - Still keep it fresher-friendly.
-- Do not ask advanced industry-level or research-level questions.
 
 FOR HR:
-Generate one simple HR interview question.
-Focus on: introduction, strengths, weaknesses, goals, project explanation, teamwork, challenges, internship, learning mindset, communication.
-
-Easy HR examples:
-Tell me about yourself.
-What are your strengths and weaknesses?
-Why should we hire you?
-
-Medium HR examples:
-Tell me about a challenge you faced in a project and how you handled it.
-How do you manage pressure during deadlines?
-
-Hard HR examples:
-If your team member is not contributing to a project, how will you handle the situation?
-Describe a time when you learned from failure.
+Generate one HR interview question.
+Focus on introduction, strengths, weaknesses, goals, projects, teamwork, challenges, internship, learning mindset, communication.
 
 FOR DBMS:
-Generate one DBMS question suitable for fresher interviews.
-Focus on: keys, normalization, joins, indexing, transactions, ACID, constraints, SQL basics.
-
-Easy DBMS examples:
-What is a primary key in DBMS?
-What is normalization in DBMS?
-What is the difference between primary key and foreign key?
-
-Medium DBMS examples:
-What is the difference between INNER JOIN and LEFT JOIN?
-Why do we use indexing in a database?
-What are ACID properties in DBMS?
-
-Hard DBMS examples:
-How would you design tables for a student course registration system?
-When can indexing slow down database performance?
+Generate one DBMS question.
+Focus on keys, normalization, joins, indexing, transactions, ACID, constraints, SQL basics.
 
 FOR OOPS:
-Generate one OOPS question suitable for fresher interviews.
-Focus on: class, object, inheritance, polymorphism, encapsulation, abstraction, constructor, overloading, overriding, interface, abstract class.
-
-Easy OOPS examples:
-What is a class and object in OOPS?
-What is inheritance?
-What is encapsulation?
-
-Medium OOPS examples:
-What is the difference between overloading and overriding?
-What is the difference between abstraction and encapsulation?
-What is the difference between interface and abstract class?
-
-Hard OOPS examples:
-How would you use inheritance in a real-world project?
-Why is polymorphism useful in software development?
+Generate one OOPS question.
+Focus on class, object, inheritance, polymorphism, encapsulation, abstraction, constructor, overloading, overriding, interface, abstract class.
 
 IMPORTANT:
 - If Interview Type is HR, generate only HR question.
@@ -223,8 +219,24 @@ IMPORTANT:
 - If Interview Type is OOPS, generate only OOPS question.
 - Do not mix topics.
 - Do not ask coding questions for HR, DBMS, or OOPS.
-- The question should gradually match the selected difficulty level.
 `;
+}
+
+function getErrorMessage(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    return (
+      error.response?.data?.error ||
+      error.response?.data?.message ||
+      error.message ||
+      "Axios request failed."
+    );
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Unknown error occurred.";
 }
 
 export async function POST(req: Request) {
@@ -242,21 +254,40 @@ export async function POST(req: Request) {
       );
     }
 
-    /*
-      DSA questions come from fixed internal question bank.
-      This keeps Run Code stable and avoids wrong/unsupported code problems.
-    */
-    if (interviewType === "DSA") {
-      const selectedTopic = topic || "Array";
-      const selectedDifficulty = difficulty || "Easy";
+    const dbUser = await getCurrentDbUser();
 
-      const filteredQuestions = DSA_QUESTIONS.filter(
-        (q) =>
-          q.topic === selectedTopic &&
-          q.difficulty === selectedDifficulty
+    if (!dbUser) {
+      return NextResponse.json(
+        { error: "Unauthorized. Please login first." },
+        { status: 401 }
       );
+    }
 
-      if (filteredQuestions.length === 0) {
+    const selectedTopic = interviewType === "DSA" ? topic || "Array" : topic;
+    const selectedDifficulty = difficulty || "Easy";
+
+    const usedQuestions = await getUsedQuestions({
+      userId: dbUser.id,
+      interviewType,
+      topic: selectedTopic,
+      difficulty: selectedDifficulty,
+    });
+
+    const session = await createInterviewSession({
+      userId: dbUser.id,
+      interviewType,
+      topic: selectedTopic,
+      difficulty: selectedDifficulty,
+    });
+
+    if (interviewType === "DSA") {
+      const selectedQuestion = getNonRepeatedDsaQuestion({
+        topic: selectedTopic,
+        difficulty: selectedDifficulty,
+        usedQuestions,
+      });
+
+      if (!selectedQuestion) {
         return NextResponse.json(
           {
             error: `No DSA question found for ${selectedTopic} - ${selectedDifficulty}.`,
@@ -265,9 +296,8 @@ export async function POST(req: Request) {
         );
       }
 
-      const selectedQuestion = getRandomItem(filteredQuestions);
-
       return NextResponse.json({
+        sessionId: session.id,
         question: selectedQuestion.question,
         source: "question_bank",
         interviewType,
@@ -276,17 +306,19 @@ export async function POST(req: Request) {
       });
     }
 
-    /*
-      HR / DBMS / OOPS questions come from AI,
-      with controlled prompt and safe fallback.
-    */
     if (!process.env.GROQ_API_KEY) {
+      const fallbackQuestion = getFallbackQuestion(
+        interviewType,
+        selectedDifficulty
+      );
+
       return NextResponse.json({
-        question: getFallbackQuestion(interviewType, difficulty),
+        sessionId: session.id,
+        question: fallbackQuestion,
         source: "fallback",
         interviewType,
-        topic,
-        difficulty,
+        topic: selectedTopic,
+        difficulty: selectedDifficulty,
       });
     }
 
@@ -299,25 +331,34 @@ export async function POST(req: Request) {
             role: "system",
             content: buildSystemPrompt({
               interviewType,
-              topic,
-              difficulty,
+              topic: selectedTopic,
+              difficulty: selectedDifficulty,
+              usedQuestions,
             }),
           },
           {
             role: "user",
             content: `
-Generate one ${difficulty} level ${interviewType} interview question.
+Generate one ${selectedDifficulty} level ${interviewType} interview question.
 
-Topic: ${topic || "General"}
+Topic: ${selectedTopic || "General"}
+
+Previously asked questions:
+${
+  usedQuestions.length > 0
+    ? usedQuestions.map((q, index) => `${index + 1}. ${q}`).join("\n")
+    : "No previous questions."
+}
 
 Remember:
 - Return only the question.
 - Keep it clear and fresher-friendly.
+- Do not repeat or slightly rephrase previous questions.
 `,
           },
         ],
-        temperature: 0.4,
-        max_tokens: 80,
+        temperature: 0.5,
+        max_tokens: 100,
       },
       {
         headers: {
@@ -333,27 +374,31 @@ Remember:
     );
 
     if (!aiQuestion) {
+      const fallbackQuestion = getFallbackQuestion(
+        interviewType,
+        selectedDifficulty
+      );
+
       return NextResponse.json({
-        question: getFallbackQuestion(interviewType, difficulty),
+        sessionId: session.id,
+        question: fallbackQuestion,
         source: "fallback",
         interviewType,
-        topic,
-        difficulty,
+        topic: selectedTopic,
+        difficulty: selectedDifficulty,
       });
     }
 
     return NextResponse.json({
+      sessionId: session.id,
       question: aiQuestion,
       source: "ai",
       interviewType,
-      topic,
-      difficulty,
+      topic: selectedTopic,
+      difficulty: selectedDifficulty,
     });
-  } catch (error: any) {
-    console.error(
-      "INTERVIEW GENERATE ERROR:",
-      error.response?.data || error.message
-    );
+  } catch (error: unknown) {
+    console.error("INTERVIEW GENERATE ERROR:", getErrorMessage(error));
 
     return NextResponse.json(
       {

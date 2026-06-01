@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  name      String?
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  interviewSessions InterviewSession[]
+  resumeAnalyses    ResumeAnalysis[]
+  codeSubmissions   CodeSubmission[]
+  dailyStats        DailyStats[]
+  usedQuestions     UsedQuestion[]
+}
+
+model InterviewSession {
+  id            String    @id @default(cuid())
+  userId        String
+  interviewType String
+  topic         String?
+  difficulty    String?
+  totalScore    Float?
+  averageScore  Float?
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers InterviewAnswer[]
+
+  @@index([userId])
+  @@index([userId, interviewType])
+  @@index([userId, interviewType, topic, difficulty])
+}
+
+model InterviewAnswer {
+  id              String   @id @default(cuid())
+  sessionId       String
+  question        String
+  answer          String
+  score           Float
+  strengths       String[]
+  weaknesses      String[]
+  improvementTips String[]
+  idealAnswer     String?
+  createdAt       DateTime @default(now())
+
+  session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model UsedQuestion {
+  id            String   @id @default(cuid())
+  userId        String
+  interviewType String
+  topic         String?
+  difficulty    String?
+  question      String
+  usedAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, interviewType])
+  @@index([userId, interviewType, topic, difficulty])
+}
+
+model ResumeAnalysis {
+  id                 String   @id @default(cuid())
+  userId             String
+  targetRole         String
+  score              Float
+  atsScore           Float
+  skillsMatch        Float
+  keywordMatch       Float
+  strengths          String[]
+  weaknesses         String[]
+  missingSkills      String[]
+  suggestions        String
+  recommendedRoadmap String[]
+  roleFitSummary     String?
+  atsNote            String?
+  createdAt          DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CodeSubmission {
+  id            String   @id @default(cuid())
+  userId        String
+  questionTitle String
+  topic         String?
+  difficulty    String?
+  code          String
+  output        String?
+  status        String
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DailyStats {
+  id             String   @id @default(cuid())
+  userId         String
+  date           String
+  interviews     Int      @default(0)
+  dsaSolved      Int      @default(0)
+  averageScore   Float    @default(0)
+  resumeAnalyses Int      @default(0)
+  latestAtsScore Float    @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+}

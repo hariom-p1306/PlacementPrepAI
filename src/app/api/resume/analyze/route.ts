@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
 import { saveResumeProgress } from "@/lib/progress";
+import { getCurrentDbUser } from "@/lib/user";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type ResumeAnalyzeResult = {
   score: number;
@@ -132,7 +135,7 @@ function extractJson(text: string) {
   return cleaned.slice(firstBrace, lastBrace + 1);
 }
 
-function clampNumber(value: any, min: number, max: number) {
+function clampNumber(value: unknown, min: number, max: number) {
   const numberValue = Number(value);
 
   if (Number.isNaN(numberValue)) return min;
@@ -140,23 +143,22 @@ function clampNumber(value: any, min: number, max: number) {
   return Math.min(Math.max(numberValue, min), max);
 }
 
-function normalizeStringArray(value: any) {
+function normalizeStringArray(value: unknown) {
   if (!Array.isArray(value)) return [];
 
   return value
-    .filter((item) => typeof item === "string")
+    .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim())
     .filter(Boolean);
 }
 
 function normalizeResult(
-  parsed: any,
+  parsed: Partial<ResumeAnalyzeResult>,
   hasJobDescription: boolean
 ): ResumeAnalyzeResult {
   let atsScore = clampNumber(parsed.ats_score ?? 0, 0, 100);
   let keywordMatch = clampNumber(parsed.keyword_match ?? 0, 0, 100);
 
-  // Strict rule: without JD, ATS cannot be treated as exact ATS match.
   if (!hasJobDescription) {
     atsScore = Math.min(atsScore, 70);
     keywordMatch = Math.min(keywordMatch, 65);
@@ -172,21 +174,28 @@ function normalizeResult(
     weaknesses: normalizeStringArray(parsed.weaknesses).slice(0, 6),
     missing_skills: normalizeStringArray(parsed.missing_skills).slice(0, 8),
 
-    suggestions: parsed.suggestions || "No suggestions available.",
+    suggestions:
+      typeof parsed.suggestions === "string" && parsed.suggestions.trim()
+        ? parsed.suggestions.trim()
+        : "No suggestions available.",
+
     recommended_roadmap: normalizeStringArray(parsed.recommended_roadmap).slice(
       0,
       6
     ),
 
     role_fit_summary:
-      parsed.role_fit_summary ||
-      "Role fit summary is not available for this analysis.",
+      typeof parsed.role_fit_summary === "string" &&
+      parsed.role_fit_summary.trim()
+        ? parsed.role_fit_summary.trim()
+        : "Role fit summary is not available for this analysis.",
 
     ats_note:
-      parsed.ats_note ||
-      (hasJobDescription
+      typeof parsed.ats_note === "string" && parsed.ats_note.trim()
+        ? parsed.ats_note.trim()
+        : hasJobDescription
         ? "ATS score is calculated using the provided job description."
-        : "ATS score is estimated because no job description was provided."),
+        : "ATS score is estimated because no job description was provided.",
   };
 }
 
@@ -225,6 +234,23 @@ function getFallbackResult(
   };
 }
 
+function getErrorMessage(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    return (
+      error.response?.data?.error ||
+      error.response?.data?.message ||
+      error.message ||
+      "Axios request failed."
+    );
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Unknown error occurred.";
+}
+
 async function safelySaveResumeProgress(
   selectedRole: string,
   result: ResumeAnalyzeResult
@@ -234,16 +260,64 @@ async function safelySaveResumeProgress(
       targetRole: selectedRole,
       ...result,
     });
-  } catch (error) {
-    console.error("REDIS SAVE RESUME ERROR:", error);
+  } catch (error: unknown) {
+    console.error("REDIS SAVE RESUME ERROR:", getErrorMessage(error));
+  }
+}
+
+async function safelySaveResumeAnalysisToPostgres({
+  userId,
+  selectedRole,
+  result,
+}: {
+  userId: string;
+  selectedRole: string;
+  result: ResumeAnalyzeResult;
+}) {
+  try {
+    await prisma.resumeAnalysis.create({
+      data: {
+        user: {
+          connect: {
+            id: userId,
+          },
+        },
+        targetRole: selectedRole,
+        score: result.score,
+        atsScore: result.ats_score,
+        skillsMatch: result.skills_match,
+        keywordMatch: result.keyword_match,
+        strengths: result.strengths,
+        weaknesses: result.weaknesses,
+        missingSkills: result.missing_skills,
+        suggestions: result.suggestions,
+        recommendedRoadmap: result.recommended_roadmap,
+        roleFitSummary: result.role_fit_summary,
+        atsNote: result.ats_note,
+      },
+    });
+  } catch (error: unknown) {
+    console.error("POSTGRES SAVE RESUME ERROR:", getErrorMessage(error));
   }
 }
 
 export async function POST(req: Request) {
   let selectedRole = "Full Stack Developer";
   let hasJobDescription = false;
+  let dbUserId: string | null = null;
 
   try {
+    const dbUser = await getCurrentDbUser();
+
+    if (!dbUser) {
+      return NextResponse.json(
+        { error: "Unauthorized. Please login first." },
+        { status: 401 }
+      );
+    }
+
+    dbUserId = dbUser.id;
+
     const { resumeText, targetRole, jobDescription } = await req.json();
 
     if (!resumeText || typeof resumeText !== "string") {
@@ -266,7 +340,22 @@ export async function POST(req: Request) {
     hasJobDescription = Boolean(jd);
 
     const roleRequirements =
-      ROLE_REQUIREMENTS[selectedRole] || ROLE_REQUIREMENTS["Full Stack Developer"];
+      ROLE_REQUIREMENTS[selectedRole] ||
+      ROLE_REQUIREMENTS["Full Stack Developer"];
+
+    if (!process.env.GROQ_API_KEY) {
+      const fallbackResult = getFallbackResult(selectedRole, hasJobDescription);
+
+      await safelySaveResumeProgress(selectedRole, fallbackResult);
+
+      await safelySaveResumeAnalysisToPostgres({
+        userId: dbUser.id,
+        selectedRole,
+        result: fallbackResult,
+      });
+
+      return NextResponse.json(fallbackResult, { status: 200 });
+    }
 
     const response = await axios.post(
       "https://api.groq.com/openai/v1/chat/completions",
@@ -352,33 +441,46 @@ ${resumeText}
           },
         ],
         temperature: 0.2,
+        max_tokens: 1200,
       },
       {
         headers: {
           Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
           "Content-Type": "application/json",
         },
+        timeout: 20000,
       }
     );
 
-    const aiContent = response.data.choices[0].message.content;
+    const aiContent = response.data.choices?.[0]?.message?.content || "";
     const jsonText = extractJson(aiContent);
-    const parsed = JSON.parse(jsonText);
+    const parsed = JSON.parse(jsonText) as Partial<ResumeAnalyzeResult>;
 
     const finalResult = normalizeResult(parsed, hasJobDescription);
 
     await safelySaveResumeProgress(selectedRole, finalResult);
 
+    await safelySaveResumeAnalysisToPostgres({
+      userId: dbUser.id,
+      selectedRole,
+      result: finalResult,
+    });
+
     return NextResponse.json(finalResult);
-  } catch (error: any) {
-    console.error(
-      "RESUME ANALYZE ERROR:",
-      error.response?.data || error.message
-    );
+  } catch (error: unknown) {
+    console.error("RESUME ANALYZE ERROR:", getErrorMessage(error));
 
     const fallbackResult = getFallbackResult(selectedRole, hasJobDescription);
 
     await safelySaveResumeProgress(selectedRole, fallbackResult);
+
+    if (dbUserId) {
+      await safelySaveResumeAnalysisToPostgres({
+        userId: dbUserId,
+        selectedRole,
+        result: fallbackResult,
+      });
+    }
 
     return NextResponse.json(fallbackResult, { status: 200 });
   }

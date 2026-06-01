@@ -1,8 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useInterviewStore } from "@/features/interview/interview.store";
-import { useState } from "react";
 
 const interviewCategories = [
   {
@@ -80,12 +80,10 @@ export default function StartPage() {
   const router = useRouter();
 
   const reset = useInterviewStore((state) => state.reset);
-  const setInterviewType = useInterviewStore(
-    (state) => state.setInterviewType
-  );
+  // const setConfig = useInterviewStore((state) => state.setConfig);
 
   const [selected, setSelected] = useState<string>("DSA");
-  const [topic, setTopic] = useState<string>(topicsByCategory["DSA"][0]);
+  const [topic, setTopic] = useState<string>(topicsByCategory.DSA[0]);
   const [difficulty, setDifficulty] = useState<string>("Easy");
 
   const handleCategoryChange = (category: string) => {
@@ -94,31 +92,25 @@ export default function StartPage() {
     setDifficulty("Easy");
   };
 
-  const handleStart = () => {
-    if (!selected) return;
+const handleStart = () => {
+  if (!selected) return;
 
-    const interviewConfig = {
-      interviewType: selected,
-      topic,
-      difficulty,
-    };
-
-    reset();
-    setInterviewType(selected);
-
-    /*
-      localStorage backup:
-      Session page can read this config and send it to /api/interview/generate.
-    */
-    localStorage.setItem("interviewConfig", JSON.stringify(interviewConfig));
-
-    router.push("/interview/session");
+  const interviewConfig = {
+    interviewType: selected,
+    topic,
+    difficulty,
   };
+
+  reset();
+
+  localStorage.setItem("interviewConfig", JSON.stringify(interviewConfig));
+
+  router.push("/interview/session");
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-gray-950 to-gray-900 flex items-center justify-center text-white px-4 py-10">
       <div className="w-full max-w-4xl bg-gray-900/80 backdrop-blur-md border border-gray-700 p-6 md:p-8 rounded-2xl shadow-2xl">
-        {/* Header */}
         <div className="text-center mb-6">
           <div className="text-5xl mb-3">🎯</div>
 
@@ -132,7 +124,6 @@ export default function StartPage() {
           </p>
         </div>
 
-        {/* Category Selection */}
         <div className="mb-5">
           <h2 className="text-lg font-semibold mb-3">
             1. Select Interview Type
@@ -151,12 +142,11 @@ export default function StartPage() {
                       ? "bg-blue-600/20 border-blue-500 shadow-lg shadow-blue-950/40"
                       : "bg-gray-800 border-gray-700 hover:border-blue-400 hover:bg-gray-800/80"
                   }`}
+                  type="button"
                 >
                   <div className="flex items-center gap-3 mb-2">
                     <span className="text-2xl">{category.icon}</span>
-                    <span className="font-bold text-lg">
-                      {category.label}
-                    </span>
+                    <span className="font-bold text-lg">{category.label}</span>
                   </div>
 
                   <p className="text-sm text-gray-400 leading-6">
@@ -168,7 +158,6 @@ export default function StartPage() {
           </div>
         </div>
 
-        {/* Topic Selection */}
         <div className="mb-7">
           <h2 className="text-lg font-semibold mb-3">2. Select Topic</h2>
 
@@ -185,7 +174,6 @@ export default function StartPage() {
           </select>
         </div>
 
-        {/* Difficulty Selection */}
         <div className="mb-7">
           <h2 className="text-lg font-semibold mb-3">
             3. Select Difficulty
@@ -204,6 +192,7 @@ export default function StartPage() {
                       ? "bg-green-600/20 border-green-500 shadow-lg shadow-green-950/40"
                       : "bg-gray-800 border-gray-700 hover:border-green-400"
                   }`}
+                  type="button"
                 >
                   <p
                     className={`font-bold ${
@@ -222,7 +211,6 @@ export default function StartPage() {
           </div>
         </div>
 
-        {/* Selected Summary */}
         <div className="bg-gray-950 border border-gray-800 rounded-xl p-4 mb-7">
           <h3 className="font-semibold mb-4">Selected Interview Setup</h3>
 
@@ -244,7 +232,6 @@ export default function StartPage() {
           </div>
         </div>
 
-        {/* Features */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-7 text-sm">
           <div className="bg-gray-800 border border-gray-700 rounded-lg p-3">
             ✅ Real interview questions
@@ -259,7 +246,6 @@ export default function StartPage() {
           </div>
         </div>
 
-        {/* CTA */}
         <button
           onClick={handleStart}
           disabled={!selected}
@@ -268,6 +254,7 @@ export default function StartPage() {
               ? "bg-blue-600 hover:bg-blue-700"
               : "bg-gray-600 cursor-not-allowed"
           }`}
+          type="button"
         >
           Start Interview
         </button>

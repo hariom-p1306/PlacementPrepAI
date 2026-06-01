@@ -187,36 +187,32 @@ Skills Match: ${result.skills_match ?? 0}%
 Keyword Match: ${result.keyword_match ?? 0}%
 
 Strengths:
-${
-  Array.isArray(result.strengths) && result.strengths.length > 0
-    ? result.strengths.map((item) => `- ${item}`).join("\n")
-    : "N/A"
-}
+${Array.isArray(result.strengths) && result.strengths.length > 0
+        ? result.strengths.map((item) => `- ${item}`).join("\n")
+        : "N/A"
+      }
 
 Weaknesses:
-${
-  Array.isArray(result.weaknesses) && result.weaknesses.length > 0
-    ? result.weaknesses.map((item) => `- ${item}`).join("\n")
-    : "N/A"
-}
+${Array.isArray(result.weaknesses) && result.weaknesses.length > 0
+        ? result.weaknesses.map((item) => `- ${item}`).join("\n")
+        : "N/A"
+      }
 
 Missing Skills:
-${
-  Array.isArray(result.missing_skills) && result.missing_skills.length > 0
-    ? result.missing_skills.map((item) => `- ${item}`).join("\n")
-    : "N/A"
-}
+${Array.isArray(result.missing_skills) && result.missing_skills.length > 0
+        ? result.missing_skills.map((item) => `- ${item}`).join("\n")
+        : "N/A"
+      }
 
 Improvement Suggestions:
 ${result.suggestions || "N/A"}
 
 Recommended Roadmap:
-${
-  Array.isArray(result.recommended_roadmap) &&
-  result.recommended_roadmap.length > 0
-    ? result.recommended_roadmap.map((item) => `- ${item}`).join("\n")
-    : "N/A"
-}
+${Array.isArray(result.recommended_roadmap) &&
+        result.recommended_roadmap.length > 0
+        ? result.recommended_roadmap.map((item) => `- ${item}`).join("\n")
+        : "N/A"
+      }
 `;
   };
 
@@ -339,13 +335,24 @@ ${
           </p>
         </div>
 
-        <button
-          onClick={clearAll}
-          className="border border-gray-700 hover:border-red-500 text-gray-300 hover:text-red-400 px-4 py-2 rounded-lg transition w-fit"
-        >
-          Clear All
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <a
+            href="/resume/history"
+            className="bg-gray-800 hover:bg-gray-700 border border-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
+          >
+            View Resume History
+          </a>
+
+          <button
+            onClick={clearAll}
+            className="border border-gray-700 hover:border-red-500 text-gray-300 hover:text-red-400 px-4 py-2 rounded-lg text-sm font-semibold transition"
+          >
+            Clear All
+          </button>
+        </div>
       </div>
+
+
 
       {/* Top Section */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">

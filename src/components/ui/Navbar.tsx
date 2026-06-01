@@ -14,14 +14,15 @@ export default function Navbar() {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const navLinks = [
-    { label: "Interview", path: "/interview/start" },
-    { label: "Dashboard", path: "/interview/dashboard" },
-    { label: "Resume", path: "/resume" },
-    { label: "Roadmap", path: "/roadmap" },
-    { label: "Mentor", path: "/mentor" },
-    { label: "Cover Letter", path: "/cover-letter" },
-  ];
+ const navLinks = [
+  { label: "Interview", path: "/interview/start" },
+  { label: "History", path: "/interview/history" },
+  { label: "Dashboard", path: "/interview/dashboard" },
+  { label: "Resume", path: "/resume" },
+  { label: "Roadmap", path: "/roadmap" },
+  { label: "Mentor", path: "/mentor" },
+  { label: "Cover Letter", path: "/cover-letter" },
+];
 
   const goTo = (path: string) => {
     router.push(path);
@@ -33,14 +34,14 @@ export default function Navbar() {
       <div className="flex justify-between items-center px-6 py-4">
         {/* Logo */}
         <h1
-          className="font-bold text-lg cursor-pointer"
+          className="font-bold text-base md:text-lg cursor-pointer"
           onClick={() => goTo("/")}
         >
           PlacementPrep AI 🚀
         </h1>
 
         {/* Desktop Menu */}
-        <div className="hidden md:flex gap-4 items-center">
+        <div className="hidden md:flex gap-3 items-center text-sm">
           {navLinks.map((link) =>
             isSignedIn ? (
               <button
