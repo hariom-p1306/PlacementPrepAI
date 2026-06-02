@@ -266,7 +266,7 @@ export async function POST(req: Request) {
     const selectedTopic = interviewType === "DSA" ? topic || "Array" : topic;
     const selectedDifficulty = difficulty || "Easy";
 
-    const usedQuestions = await getUsedQuestions({
+    const usedQuestions: string[] = await getUsedQuestions({
       userId: dbUser.id,
       interviewType,
       topic: selectedTopic,
@@ -344,11 +344,12 @@ Generate one ${selectedDifficulty} level ${interviewType} interview question.
 Topic: ${selectedTopic || "General"}
 
 Previously asked questions:
-${
-  usedQuestions.length > 0
-    ? usedQuestions.map((q, index) => `${index + 1}. ${q}`).join("\n")
-    : "No previous questions."
-}
+${usedQuestions.length > 0
+                ? usedQuestions
+                  .map((q: string, index: number) => `${index + 1}. ${q}`)
+                  .join("\n")
+                : "No previous questions."
+              }
 
 Remember:
 - Return only the question.
