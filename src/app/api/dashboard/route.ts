@@ -6,6 +6,17 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 10;
 
+type CompletedInterview = {
+  id: string;
+  interviewType: string;
+  topic: string | null;
+  difficulty: string | null;
+  totalScore: number | null;
+  averageScore: number | null;
+  startedAt: Date;
+  completedAt: Date | null;
+};
+
 type WeakArea = {
   name: string;
   count: number;
@@ -189,12 +200,15 @@ async function getPostgresDashboard() {
     }),
   ]);
 
-  const totalInterviews = completedInterviews.length;
+ const typedCompletedInterviews =
+  completedInterviews as CompletedInterview[];
 
-  const scoredInterviews = completedInterviews.filter(
-    (session: { averageScore: number | null }) =>
-      typeof session.averageScore === "number"
-  );
+const totalInterviews = typedCompletedInterviews.length;
+
+const scoredInterviews = typedCompletedInterviews.filter(
+  (session: CompletedInterview) =>
+    typeof session.averageScore === "number"
+);
 
   const averageScore =
     scoredInterviews.length > 0
