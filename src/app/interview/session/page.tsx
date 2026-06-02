@@ -68,7 +68,6 @@ export default function SessionPage() {
   const [input, setInput] = useState("");
 
   const [loading, setLoading] = useState(false);
-
   const [sessionId, setSessionId] = useState("");
 
   const isFetchingQuestionRef = useRef(false);
@@ -81,7 +80,7 @@ export default function SessionPage() {
   const [runOutput, setRunOutput] = useState("");
 
   const [leftWidth, setLeftWidth] = useState(50);
-  const [editorHeight, setEditorHeight] = useState(280);
+  const [editorHeight, setEditorHeight] = useState(320);
   const [isDragging, setIsDragging] = useState(false);
 
   const activeInterviewType =
@@ -92,14 +91,6 @@ export default function SessionPage() {
 
   const isDSA = activeInterviewType === "DSA";
 
-  /*
-    DSA question structure:
-    Question text
-    Function Signature:
-    Java starter code
-    Runner Code:
-    hidden runner code
-  */
   const runnerParts = question.split("Runner Code:");
   const questionWithoutRunner = runnerParts[0]?.trim() || "";
   const runnerCode = runnerParts[1]?.trim() || "";
@@ -376,54 +367,53 @@ How it is used in programming:`;
     };
   };
 
- useEffect(() => {
-  if (!_hasHydrated) return;
+  useEffect(() => {
+    if (!_hasHydrated) return;
 
-  const savedConfig = localStorage.getItem("interviewConfig");
+    const savedConfig = localStorage.getItem("interviewConfig");
 
-  if (savedConfig) {
-    try {
-      const parsed = JSON.parse(savedConfig);
+    if (savedConfig) {
+      try {
+        const parsed = JSON.parse(savedConfig);
 
-      setConfig({
-        interviewType: parsed.interviewType || defaultConfig.interviewType,
-        topic: parsed.topic || defaultConfig.topic,
-        difficulty: parsed.difficulty || defaultConfig.difficulty,
-      });
-    } catch {
+        setConfig({
+          interviewType: parsed.interviewType || defaultConfig.interviewType,
+          topic: parsed.topic || defaultConfig.topic,
+          difficulty: parsed.difficulty || defaultConfig.difficulty,
+        });
+      } catch {
+        setConfig(defaultConfig);
+      }
+    } else {
       setConfig(defaultConfig);
     }
-  } else {
-    setConfig(defaultConfig);
-  }
 
-  lastFetchKeyRef.current = "";
-  setIsConfigReady(true);
-}, [_hasHydrated]);
+    lastFetchKeyRef.current = "";
+    setIsConfigReady(true);
+  }, [_hasHydrated]);
 
   useEffect(() => {
-  if (_hasHydrated && isConfigReady && config.interviewType) {
-    fetchQuestion();
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [
-  _hasHydrated,
-  isConfigReady,
-  config.interviewType,
-  config.topic,
-  config.difficulty,
-]);
+    if (_hasHydrated && isConfigReady && config.interviewType) {
+      fetchQuestion();
+    }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    _hasHydrated,
+    isConfigReady,
+    config.interviewType,
+    config.topic,
+    config.difficulty,
+  ]);
 
   useEffect(() => {
     if (timeLeft === 0 && !showFeedback && input.trim()) {
       handleSubmit();
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft]);
 
-  if (!_hasHydrated || !isConfigReady) {
-  return <div className="text-white p-6">Loading...</div>;
-}
   const handleResizeMouseDown = () => {
     setIsDragging(true);
   };
@@ -434,7 +424,7 @@ How it is used in programming:`;
     const container = e.currentTarget.getBoundingClientRect();
     const newLeftWidth = ((e.clientX - container.left) / container.width) * 100;
 
-    if (newLeftWidth >= 30 && newLeftWidth <= 70) {
+    if (newLeftWidth >= 35 && newLeftWidth <= 65) {
       setLeftWidth(newLeftWidth);
     }
   };
@@ -456,151 +446,242 @@ How it is used in programming:`;
     return "text-gray-300";
   };
 
+  if (!_hasHydrated || !isConfigReady) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-white px-4 py-6">
+        Loading...
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <div
-        className="flex gap-0 p-4 min-h-[calc(100vh-90px)] select-none"
-        onMouseMove={handleResizeMouseMove}
-        onMouseUp={handleResizeMouseUp}
-        onMouseLeave={handleResizeMouseUp}
-      >
-        {/* Left Panel - Question */}
-        <div style={{ width: `${leftWidth}%` }} className="pr-3">
-          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 h-[calc(100vh-120px)] overflow-y-auto">
-            <div className="flex flex-wrap justify-between items-center gap-3 text-sm mb-4">
-              <div>
-                <p className="text-gray-400">
-                  Question {currentIndex + 1} of {total}
-                </p>
-
-                <div className="flex flex-wrap gap-2 mt-2">
-                  <span className="px-3 py-1 rounded-full bg-blue-600/20 border border-blue-500 text-blue-300 text-xs">
-                    {activeInterviewType}
-                  </span>
-
-                  <span className="px-3 py-1 rounded-full bg-purple-600/20 border border-purple-500 text-purple-300 text-xs">
-                    {activeTopic}
-                  </span>
-
-                  <span className="px-3 py-1 rounded-full bg-green-600/20 border border-green-500 text-green-300 text-xs">
-                    {activeDifficulty}
-                  </span>
-                </div>
-              </div>
-
-              <span
-                className={`font-semibold px-3 py-1 rounded-full bg-black border border-gray-700 ${getTimerColor(
-                  timeLeft
-                )}`}
-              >
-                ⏱ {formatTime(timeLeft)}
-              </span>
-            </div>
-
-            <ProgressBar current={currentIndex + 1} total={total} />
-
-            <h2 className="text-2xl font-bold mt-6 mb-4">
-              Interview Question
-            </h2>
-
-            {isDSA ? (
-              <div className="text-gray-200 leading-8 text-base whitespace-pre-wrap">
-                <pre className="whitespace-pre-wrap font-sans">
-                  {questionText || "Loading question..."}
-                </pre>
-              </div>
-            ) : (
-              <>
-                <pre className="text-gray-200 leading-8 text-lg whitespace-pre-wrap font-sans">
-                  {question || "Loading question..."}
-                </pre>
-
-                <div className="mt-6 bg-blue-950/30 border border-blue-800 rounded-xl p-4">
-                  <h3 className="font-semibold text-blue-300 mb-2">
-                    Quick Tip
-                  </h3>
-                  <p className="text-sm text-gray-300 leading-6">
-                    {activeInterviewType === "HR"
-                      ? "Use Situation → Action → Result. Keep your answer clear and confident."
-                      : "Start with a simple definition, explain the key point, and give one example."}
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Middle Resizer */}
+    <div className="min-h-screen bg-gray-950 text-white px-4 py-5 md:px-8 md:py-8">
+      <div className="max-w-7xl mx-auto">
         <div
-          onMouseDown={handleResizeMouseDown}
-          className={`w-2 cursor-col-resize rounded-full transition ${isDragging ? "bg-blue-500" : "bg-gray-700 hover:bg-blue-500"
-            }`}
-          title="Drag to resize panels"
-        />
+          className="flex flex-col xl:flex-row gap-5 md:gap-6 min-h-[calc(100vh-110px)] select-none"
+          onMouseMove={handleResizeMouseMove}
+          onMouseUp={handleResizeMouseUp}
+          onMouseLeave={handleResizeMouseUp}
+        >
+          {/* Left Panel - Question */}
+          <section
+            style={{ "--right-width": `${100 - leftWidth}%` } as React.CSSProperties}
+            className="w-full xl:[width:var(--right-width)] xl:flex-none"
+          >
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 md:p-6 w-full xl:h-[calc(100vh-125px)] xl:overflow-y-auto">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 text-sm mb-4">
+                <div>
+                  <p className="text-gray-400">
+                    Question {currentIndex + 1} of {total}
+                  </p>
 
-        {/* Right Panel - Answer / Code */}
-        <div style={{ width: `${100 - leftWidth}%` }} className="pl-3">
-          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 h-[calc(100vh-120px)] overflow-y-auto">
-            {isDSA ? (
-              <>
-                <div className="flex items-center justify-between gap-4 mb-4">
-                  <h2 className="text-xl font-bold">Code Editor</h2>
-
-                  <div className="flex items-center gap-3 w-72">
-                    <span className="text-xs text-gray-400 whitespace-nowrap">
-                      Editor Height
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <span className="px-3 py-1 rounded-full bg-blue-600/20 border border-blue-500 text-blue-300 text-xs">
+                      {activeInterviewType}
                     </span>
 
-                    <input
-                      type="range"
-                      min="240"
-                      max="650"
-                      value={editorHeight}
-                      onChange={(e) => setEditorHeight(Number(e.target.value))}
-                      className="w-full"
-                    />
+                    <span className="px-3 py-1 rounded-full bg-purple-600/20 border border-purple-500 text-purple-300 text-xs">
+                      {activeTopic}
+                    </span>
 
-                    <span className="text-xs text-gray-400 w-12">
-                      {editorHeight}px
+                    <span className="px-3 py-1 rounded-full bg-green-600/20 border border-green-500 text-green-300 text-xs">
+                      {activeDifficulty}
                     </span>
                   </div>
                 </div>
 
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Write your Java code here..."
-                  spellCheck={false}
-                  wrap="off"
-                  style={{ height: `${editorHeight}px` }}
-                  className="w-full p-4 rounded-lg bg-black border border-gray-700 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                />
+                <span
+                  className={`w-fit font-semibold px-3 py-2 rounded-full bg-black border border-gray-700 ${getTimerColor(
+                    timeLeft
+                  )}`}
+                >
+                  ⏱ {formatTime(timeLeft)}
+                </span>
+              </div>
 
-                {!showFeedback && (
-                  <>
+              <ProgressBar current={currentIndex + 1} total={total} />
+
+              <h2 className="text-xl md:text-2xl font-bold mt-6 mb-4">
+                Interview Question
+              </h2>
+
+              {isDSA ? (
+                <div className="text-gray-200 leading-7 md:leading-8 text-sm md:text-base whitespace-pre-wrap">
+                  <pre className="whitespace-pre-wrap font-sans">
+                    {questionText || "Loading question..."}
+                  </pre>
+                </div>
+              ) : (
+                <>
+                  <pre className="text-gray-200 leading-7 md:leading-8 text-sm md:text-lg whitespace-pre-wrap font-sans">
+                    {question || "Loading question..."}
+                  </pre>
+
+                  <div className="mt-6 bg-blue-950/30 border border-blue-800 rounded-xl p-4">
+                    <h3 className="font-semibold text-blue-300 mb-2">
+                      Quick Tip
+                    </h3>
+
+                    <p className="text-sm text-gray-300 leading-6">
+                      {activeInterviewType === "HR"
+                        ? "Use Situation → Action → Result. Keep your answer clear and confident."
+                        : "Start with a simple definition, explain the key point, and give one example."}
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+
+          {/* Desktop Resizer */}
+          <div
+            onMouseDown={handleResizeMouseDown}
+            className={`hidden xl:block w-2 cursor-col-resize rounded-full transition ${isDragging ? "bg-blue-500" : "bg-gray-700 hover:bg-blue-500"
+              }`}
+            title="Drag to resize panels"
+          />
+
+          {/* Right Panel - Answer / Code */}
+          <section
+            style={{ "--left-width": `${leftWidth}%` } as React.CSSProperties}
+            className="w-full xl:[width:var(--left-width)] xl:flex-none"
+          >
+            <div className="bg-gray-900 border border-gray-700 rounded-2xl p-5 md:p-6 w-full xl:h-[calc(100vh-125px)] xl:overflow-y-auto">
+              {isDSA ? (
+                <>
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+                    <h2 className="text-xl md:text-2xl font-bold">
+                      Code Editor
+                    </h2>
+
+                    <div className="hidden md:flex items-center gap-3 w-full lg:w-72">
+                      <span className="text-xs text-gray-400 whitespace-nowrap">
+                        Editor Height
+                      </span>
+
+                      <input
+                        type="range"
+                        min="260"
+                        max="650"
+                        value={editorHeight}
+                        onChange={(e) =>
+                          setEditorHeight(Number(e.target.value))
+                        }
+                        className="w-full"
+                      />
+
+                      <span className="text-xs text-gray-400 w-12">
+                        {editorHeight}px
+                      </span>
+                    </div>
+                  </div>
+
+                  <textarea
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Write your Java code here..."
+                    spellCheck={false}
+                    wrap="off"
+                    style={{ height: `${editorHeight}px` }}
+                    className="w-full min-h-[280px] max-w-full p-4 rounded-xl bg-black border border-gray-700 font-mono text-xs md:text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y overflow-auto"
+                  />
+
+                  {!showFeedback && (
+                    <>
+                      <button
+                        onClick={handleRunCode}
+                        disabled={runLoading || !input.trim()}
+                        className="mt-4 w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-xl cursor-pointer disabled:opacity-60 font-semibold transition"
+                      >
+                        {runLoading ? "Running Code..." : "Run Code"}
+                      </button>
+
+                      {runOutput && (
+                        <div className="mt-4 bg-black border border-gray-700 rounded-xl p-4">
+                          <h3 className="font-bold mb-2 text-blue-400">
+                            Run Output
+                          </h3>
+
+                          <pre className="text-gray-200 whitespace-pre-wrap text-sm font-mono">
+                            {runOutput}
+                          </pre>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                        <button
+                          onClick={handleSkipQuestion}
+                          className="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-xl cursor-pointer font-semibold transition"
+                        >
+                          Skip Question
+                        </button>
+
+                        <button
+                          onClick={handleSubmit}
+                          disabled={loading || !input.trim()}
+                          className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-xl cursor-pointer disabled:opacity-60 font-semibold transition"
+                        >
+                          {loading
+                            ? "Reviewing Code..."
+                            : "Submit Code for AI Review"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                    <h2 className="text-xl md:text-2xl font-bold">
+                      Your Answer
+                    </h2>
+
+                    <span className="text-xs text-gray-400">
+                      Recommended: 45–60 seconds
+                    </span>
+                  </div>
+
+                  <textarea
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder={getAnswerPlaceholder()}
+                    className="w-full min-h-[260px] md:min-h-[340px] p-4 rounded-xl bg-black border border-gray-700 text-gray-200 text-sm md:text-base leading-7 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                  />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
                     <button
-                      onClick={handleRunCode}
-                      disabled={runLoading || !input.trim()}
-                      className="mt-4 w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg cursor-pointer disabled:opacity-60"
+                      onClick={startListening}
+                      className="w-full bg-yellow-500 hover:bg-yellow-600 text-black px-4 py-3 rounded-xl cursor-pointer font-semibold transition"
                     >
-                      {runLoading ? "Running Code..." : "Run Code"}
+                      {isListening ? "Listening..." : "🎤 Start Speaking"}
                     </button>
 
-                    {runOutput && (
-                      <div className="mt-4 bg-black border border-gray-700 rounded-lg p-4">
-                        <h3 className="font-bold mb-2 text-blue-400">
-                          Run Output
-                        </h3>
-                        <pre className="text-gray-200 whitespace-pre-wrap text-sm font-mono">
-                          {runOutput}
-                        </pre>
-                      </div>
-                    )}
+                    <button
+                      onClick={() => setInput("")}
+                      disabled={!input.trim()}
+                      className="w-full bg-gray-700 hover:bg-gray-600 px-4 py-3 rounded-xl cursor-pointer disabled:opacity-60 font-semibold transition"
+                    >
+                      Clear Answer
+                    </button>
+                  </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                  <div className="mt-5 bg-gray-950 border border-gray-800 rounded-xl p-4">
+                    <h3 className="font-semibold mb-3 text-blue-300">
+                      Suggested Answer Structure
+                    </h3>
+
+                    <ul className="space-y-2 text-sm text-gray-300">
+                      {getAnswerGuide().map((guide) => (
+                        <li key={guide}>✅ {guide}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {!showFeedback && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
                       <button
                         onClick={handleSkipQuestion}
-                        className="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-lg cursor-pointer"
+                        className="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-xl cursor-pointer font-semibold transition"
                       >
                         Skip Question
                       </button>
@@ -608,147 +689,83 @@ How it is used in programming:`;
                       <button
                         onClick={handleSubmit}
                         disabled={loading || !input.trim()}
-                        className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg cursor-pointer disabled:opacity-60"
+                        className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-xl cursor-pointer disabled:opacity-60 font-semibold transition"
                       >
-                        {loading
-                          ? "Reviewing Code..."
-                          : "Submit Code for AI Review"}
+                        {loading ? "Evaluating..." : "Submit Answer"}
                       </button>
                     </div>
-                  </>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-between gap-4 mb-4">
-                  <h2 className="text-xl font-bold">Your Answer</h2>
+                  )}
+                </>
+              )}
 
-                  <span className="text-xs text-gray-400">
-                    Recommended: 45–60 seconds
-                  </span>
-                </div>
+              {showFeedback && currentFeedback && (
+                <div className="mt-6 bg-gray-800 border border-gray-700 rounded-xl p-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                    <h3 className="font-bold text-xl">AI Feedback</h3>
 
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder={getAnswerPlaceholder()}
-                  className="w-full min-h-[260px] p-4 rounded-xl bg-black border border-gray-700 text-gray-200 text-sm leading-7 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                />
+                    <span className="w-fit px-4 py-1 rounded-full bg-blue-600/20 border border-blue-500 text-blue-300 font-bold">
+                      {currentFeedback.score}/10
+                    </span>
+                  </div>
 
-                <div className="flex flex-wrap gap-3 mt-4">
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold text-green-400 mb-1">
+                        Strengths
+                      </h4>
+
+                      <p className="text-gray-300 text-sm leading-6">
+                        {(currentFeedback.strengths || []).join(", ") ||
+                          "No strengths available."}
+                      </p>
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold text-red-400 mb-1">
+                        Weaknesses
+                      </h4>
+
+                      <p className="text-gray-300 text-sm leading-6">
+                        {(currentFeedback.weaknesses || []).join(", ") ||
+                          "No weaknesses available."}
+                      </p>
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold text-blue-400 mb-1">
+                        Improvement Tips
+                      </h4>
+
+                      <p className="text-gray-300 text-sm leading-6">
+                        {(currentFeedback.improvement_tips || []).join(", ") ||
+                          "No tips available."}
+                      </p>
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold text-yellow-400 mb-1">
+                        Ideal Answer
+                      </h4>
+
+                      <p className="text-gray-300 text-sm leading-6">
+                        {currentFeedback.ideal_answer ||
+                          "Ideal answer not available."}
+                      </p>
+                    </div>
+                  </div>
+
                   <button
-                    onClick={startListening}
-                    className="bg-yellow-500 hover:bg-yellow-600 text-black px-4 py-2 rounded-lg cursor-pointer"
+                    onClick={goToNext}
+                    className="mt-5 w-full bg-blue-600 hover:bg-blue-700 px-4 py-3 rounded-xl cursor-pointer font-semibold transition"
                   >
-                    {isListening ? "Listening..." : "🎤 Start Speaking"}
-                  </button>
-
-                  <button
-                    onClick={() => setInput("")}
-                    disabled={!input.trim()}
-                    className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg cursor-pointer disabled:opacity-60"
-                  >
-                    Clear Answer
+                    {currentIndex + 1 >= total ? "View Result" : "Next Question"}
                   </button>
                 </div>
-
-                <div className="mt-5 bg-gray-950 border border-gray-800 rounded-xl p-4">
-                  <h3 className="font-semibold mb-3 text-blue-300">
-                    Suggested Answer Structure
-                  </h3>
-
-                  <ul className="space-y-2 text-sm text-gray-300">
-                    {getAnswerGuide().map((guide) => (
-                      <li key={guide}>✅ {guide}</li>
-                    ))}
-                  </ul>
-                </div>
-
-                {!showFeedback && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
-                    <button
-                      onClick={handleSkipQuestion}
-                      className="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-lg cursor-pointer"
-                    >
-                      Skip Question
-                    </button>
-
-                    <button
-                      onClick={handleSubmit}
-                      disabled={loading || !input.trim()}
-                      className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg cursor-pointer disabled:opacity-60"
-                    >
-                      {loading ? "Evaluating..." : "Submit Answer"}
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-
-            {showFeedback && currentFeedback && (
-              <div className="mt-6 bg-gray-800 border border-gray-700 rounded-xl p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-xl">AI Feedback</h3>
-
-                  <span className="px-4 py-1 rounded-full bg-blue-600/20 border border-blue-500 text-blue-300 font-bold">
-                    {currentFeedback.score}/10
-                  </span>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-semibold text-green-400 mb-1">
-                      Strengths
-                    </h4>
-                    <p className="text-gray-300 text-sm leading-6">
-                      {(currentFeedback.strengths || []).join(", ") ||
-                        "No strengths available."}
-                    </p>
-                  </div>
-
-                  <div>
-                    <h4 className="font-semibold text-red-400 mb-1">
-                      Weaknesses
-                    </h4>
-                    <p className="text-gray-300 text-sm leading-6">
-                      {(currentFeedback.weaknesses || []).join(", ") ||
-                        "No weaknesses available."}
-                    </p>
-                  </div>
-
-                  <div>
-                    <h4 className="font-semibold text-blue-400 mb-1">
-                      Improvement Tips
-                    </h4>
-                    <p className="text-gray-300 text-sm leading-6">
-                      {(currentFeedback.improvement_tips || []).join(", ") ||
-                        "No tips available."}
-                    </p>
-                  </div>
-
-                  <div>
-                    <h4 className="font-semibold text-yellow-400 mb-1">
-                      Ideal Answer
-                    </h4>
-                    <p className="text-gray-300 text-sm leading-6">
-                      {currentFeedback.ideal_answer ||
-                        "Ideal answer not available."}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={goToNext}
-                  className="mt-5 w-full bg-blue-600 hover:bg-blue-700 px-4 py-3 rounded-lg cursor-pointer"
-                >
-                  {currentIndex + 1 >= total ? "View Result" : "Next Question"}
-                </button>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          </section>
         </div>
       </div>
     </div>
   );
 }
-
