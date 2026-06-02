@@ -192,19 +192,21 @@ async function getPostgresDashboard() {
   const totalInterviews = completedInterviews.length;
 
   const scoredInterviews = completedInterviews.filter(
-    (session) => typeof session.averageScore === "number"
+    (session: { averageScore: number | null }) =>
+      typeof session.averageScore === "number"
   );
 
   const averageScore =
     scoredInterviews.length > 0
       ? Number(
-          (
-            scoredInterviews.reduce(
-              (sum, session) => sum + Number(session.averageScore || 0),
-              0
-            ) / scoredInterviews.length
-          ).toFixed(1)
-        )
+        (
+          scoredInterviews.reduce(
+            (sum: number, session: { averageScore: number | null }) =>
+              sum + Number(session.averageScore || 0),
+            0
+          ) / scoredInterviews.length
+        ).toFixed(1)
+      )
       : 0;
 
   const dsaSolved = completedInterviews.filter(
@@ -240,9 +242,8 @@ async function getPostgresDashboard() {
     .slice(0, 5)
     .map((session) => ({
       title: `${session.interviewType} Interview`,
-      subtitle: `${session.topic || "General"} • ${
-        session.difficulty || "Easy"
-      }`,
+      subtitle: `${session.topic || "General"} • ${session.difficulty || "Easy"
+        }`,
       score: `${session.averageScore || 0}/10`,
       date: formatDate(session.completedAt || session.startedAt),
       type: "INTERVIEW",
