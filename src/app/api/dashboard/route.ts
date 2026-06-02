@@ -17,6 +17,20 @@ type CompletedInterview = {
   completedAt: Date | null;
 };
 
+type InterviewAnswerWeakness = {
+  weaknesses: string[];
+};
+
+type ResumeAnalysisSummary = {
+  id: string;
+  targetRole: string;
+  score: number;
+  atsScore: number;
+  skillsMatch: number;
+  keywordMatch: number;
+  createdAt: Date;
+};
+
 type WeakArea = {
   name: string;
   count: number;
@@ -31,6 +45,31 @@ type RecentActivity = {
   type: "INTERVIEW" | "RESUME_ANALYSIS";
 };
 
+type RecentActivityWithTimestamp = RecentActivity & {
+  sortTimestamp: number;
+};
+
+type InterviewResult = {
+  id: string;
+  interviewType: string;
+  topic: string | null;
+  difficulty: string | null;
+  score: number;
+  totalScore: number;
+  averageScore: number;
+  createdAt: Date;
+};
+
+type ResumeResult = {
+  id: string;
+  targetRole: string;
+  score: number;
+  atsScore: number;
+  skillsMatch: number;
+  keywordMatch: number;
+  createdAt: Date;
+};
+
 const fallbackDashboard = {
   totalInterviews: 0,
   averageScore: 0,
@@ -38,8 +77,8 @@ const fallbackDashboard = {
   resumeAtsScore: 0,
   weakAreas: [] as WeakArea[],
   recentActivity: [] as RecentActivity[],
-  resumeResults: [],
-  interviewResults: [],
+  resumeResults: [] as ResumeResult[],
+  interviewResults: [] as InterviewResult[],
 };
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -69,11 +108,7 @@ function formatDate(date?: Date | null) {
   }).format(date);
 }
 
-function buildWeakAreas(
-  answers: {
-    weaknesses: string[];
-  }[]
-): WeakArea[] {
+function buildWeakAreas(answers: InterviewAnswerWeakness[]): WeakArea[] {
   const weaknessMap = new Map<string, number>();
 
   for (const answer of answers) {
@@ -87,7 +122,7 @@ function buildWeakAreas(
   }
 
   const totalWeaknessCount = Array.from(weaknessMap.values()).reduce(
-    (sum, count) => sum + count,
+    (sum: number, count: number) => sum + count,
     0
   );
 
@@ -114,10 +149,10 @@ async function getPostgresDashboard() {
   }
 
   const [
-    completedInterviews,
-    allInterviewAnswers,
+    completedInterviewsData,
+    allInterviewAnswersData,
     latestResumeAnalysis,
-    resumeAnalyses,
+    resumeAnalysesData,
   ] = await Promise.all([
     prisma.interviewSession.findMany({
       where: {
@@ -153,18 +188,7 @@ async function getPostgresDashboard() {
       },
       take: 100,
       select: {
-        id: true,
-        question: true,
-        score: true,
         weaknesses: true,
-        createdAt: true,
-        session: {
-          select: {
-            interviewType: true,
-            topic: true,
-            difficulty: true,
-          },
-        },
       },
     }),
 
@@ -200,87 +224,105 @@ async function getPostgresDashboard() {
     }),
   ]);
 
- const typedCompletedInterviews =
-  completedInterviews as CompletedInterview[];
+  const completedInterviews =
+    completedInterviewsData as CompletedInterview[];
 
-const totalInterviews = typedCompletedInterviews.length;
+  const allInterviewAnswers =
+    allInterviewAnswersData as InterviewAnswerWeakness[];
 
-const scoredInterviews = typedCompletedInterviews.filter(
-  (session: CompletedInterview) =>
-    typeof session.averageScore === "number"
-);
+  const resumeAnalyses = resumeAnalysesData as ResumeAnalysisSummary[];
+
+  const totalInterviews = completedInterviews.length;
+
+  const scoredInterviews = completedInterviews.filter(
+    (session: CompletedInterview) => session.averageScore !== null
+  );
 
   const averageScore =
     scoredInterviews.length > 0
       ? Number(
-        (
-          scoredInterviews.reduce(
-            (sum: number, session: { averageScore: number | null }) =>
-              sum + Number(session.averageScore || 0),
-            0
-          ) / scoredInterviews.length
-        ).toFixed(1)
-      )
+          (
+            scoredInterviews.reduce(
+              (sum: number, session: CompletedInterview) =>
+                sum + Number(session.averageScore || 0),
+              0
+            ) / scoredInterviews.length
+          ).toFixed(1)
+        )
       : 0;
 
   const dsaSolved = completedInterviews.filter(
-    (session) => session.interviewType === "DSA"
+    (session: CompletedInterview) => session.interviewType === "DSA"
   ).length;
 
-  const resumeAtsScore = latestResumeAnalysis?.atsScore
-    ? Math.round(latestResumeAnalysis.atsScore)
-    : 0;
+  const resumeAtsScore =
+    typeof latestResumeAnalysis?.atsScore === "number"
+      ? Math.round(latestResumeAnalysis.atsScore)
+      : 0;
 
-  const interviewResults = completedInterviews.map((session) => ({
-    id: session.id,
-    interviewType: session.interviewType,
-    topic: session.topic,
-    difficulty: session.difficulty,
-    score: session.averageScore || 0,
-    totalScore: session.totalScore || 0,
-    averageScore: session.averageScore || 0,
-    createdAt: session.completedAt || session.startedAt,
-  }));
+  const interviewResults: InterviewResult[] = completedInterviews.map(
+    (session: CompletedInterview) => ({
+      id: session.id,
+      interviewType: session.interviewType,
+      topic: session.topic,
+      difficulty: session.difficulty,
+      score: session.averageScore || 0,
+      totalScore: session.totalScore || 0,
+      averageScore: session.averageScore || 0,
+      createdAt: session.completedAt || session.startedAt,
+    })
+  );
 
-  const resumeResults = resumeAnalyses.map((analysis) => ({
-    id: analysis.id,
-    targetRole: analysis.targetRole,
-    score: analysis.score,
-    atsScore: analysis.atsScore,
-    skillsMatch: analysis.skillsMatch,
-    keywordMatch: analysis.keywordMatch,
-    createdAt: analysis.createdAt,
-  }));
+  const resumeResults: ResumeResult[] = resumeAnalyses.map(
+    (analysis: ResumeAnalysisSummary) => ({
+      id: analysis.id,
+      targetRole: analysis.targetRole,
+      score: analysis.score,
+      atsScore: analysis.atsScore,
+      skillsMatch: analysis.skillsMatch,
+      keywordMatch: analysis.keywordMatch,
+      createdAt: analysis.createdAt,
+    })
+  );
 
-  const interviewActivities: RecentActivity[] = completedInterviews
+  const interviewActivities: RecentActivityWithTimestamp[] = completedInterviews
     .slice(0, 5)
-    .map((session) => ({
-      title: `${session.interviewType} Interview`,
-      subtitle: `${session.topic || "General"} • ${session.difficulty || "Easy"
+    .map((session: CompletedInterview) => {
+      const activityDate = session.completedAt || session.startedAt;
+
+      return {
+        title: `${session.interviewType} Interview`,
+        subtitle: `${session.topic || "General"} • ${
+          session.difficulty || "Easy"
         }`,
-      score: `${session.averageScore || 0}/10`,
-      date: formatDate(session.completedAt || session.startedAt),
-      type: "INTERVIEW",
-    }));
+        score: `${session.averageScore || 0}/10`,
+        date: formatDate(activityDate),
+        type: "INTERVIEW",
+        sortTimestamp: activityDate.getTime(),
+      };
+    });
 
-  const resumeActivities: RecentActivity[] = resumeAnalyses
+  const resumeActivities: RecentActivityWithTimestamp[] = resumeAnalyses
     .slice(0, 5)
-    .map((analysis) => ({
+    .map((analysis: ResumeAnalysisSummary) => ({
       title: "Resume Analysis",
       subtitle: analysis.targetRole,
       score: `${Math.round(analysis.atsScore || 0)}% ATS`,
       date: formatDate(analysis.createdAt),
       type: "RESUME_ANALYSIS",
+      sortTimestamp: analysis.createdAt.getTime(),
     }));
 
-  const recentActivity = [...interviewActivities, ...resumeActivities]
-    .sort((a, b) => {
-      const dateA = new Date(a.date).getTime();
-      const dateB = new Date(b.date).getTime();
-
-      return dateB - dateA;
-    })
-    .slice(0, 8);
+  const recentActivity: RecentActivity[] = [
+    ...interviewActivities,
+    ...resumeActivities,
+  ]
+    .sort(
+      (a: RecentActivityWithTimestamp, b: RecentActivityWithTimestamp) =>
+        b.sortTimestamp - a.sortTimestamp
+    )
+    .slice(0, 8)
+    .map(({ sortTimestamp, ...activity }) => activity);
 
   return {
     totalInterviews,
