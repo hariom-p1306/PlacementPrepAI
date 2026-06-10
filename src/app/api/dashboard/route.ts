@@ -4,7 +4,7 @@ import { getCurrentDbUser } from "@/lib/user";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 10;
+export const maxDuration = 30;
 
 type CompletedInterview = {
   id: string;
@@ -338,7 +338,7 @@ async function getPostgresDashboard() {
 
 export async function GET() {
   try {
-    const dashboard = await withTimeout(getPostgresDashboard(), 7000);
+    const dashboard = await withTimeout(getPostgresDashboard(), 15000);
 
     return NextResponse.json(dashboard, { status: 200 });
   } catch (error: unknown) {

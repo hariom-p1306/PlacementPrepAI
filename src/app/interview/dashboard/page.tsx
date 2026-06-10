@@ -80,7 +80,7 @@ export default function DashboardPage() {
 
     const timeout = setTimeout(() => {
       controller.abort();
-    }, 7000);
+    }, 20000);
 
     try {
       setLoading(true);
