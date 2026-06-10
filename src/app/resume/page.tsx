@@ -1,6 +1,7 @@
 "use client";
-
+import { uploadFileToS3 } from "@/lib/upload-to-s3";
 import { useState } from "react";
+
 
 const targetRoles = [
   "Full Stack Developer",
@@ -35,6 +36,8 @@ export default function ResumePage() {
   const [result, setResult] = useState<ResumeAnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [fileLoading, setFileLoading] = useState(false);
+  const [uploadingToS3, setUploadingToS3] = useState(false);
+  const [resumeS3Key, setResumeS3Key] = useState("");
 
   const formatFileSize = (size: number) => {
     if (size < 1024) return `${size} B`;
@@ -55,6 +58,20 @@ export default function ResumePage() {
     const file = e.target.files?.[0];
 
     if (!file) return;
+
+    try {
+      setUploadingToS3(true);
+
+      const s3Key = await uploadFileToS3(file);
+
+      setResumeS3Key(s3Key);
+      console.log("Resume uploaded to AWS S3:", s3Key);
+    } catch (error) {
+      console.error("S3 upload failed:", error);
+      alert("Resume file upload to AWS S3 failed.");
+    } finally {
+      setUploadingToS3(false);
+    }
 
     setFileLoading(true);
     setResult(null);
@@ -127,6 +144,7 @@ export default function ResumePage() {
           resumeText,
           targetRole,
           jobDescription,
+          resumeS3Key,
         }),
       });
 
@@ -157,14 +175,15 @@ export default function ResumePage() {
     }
   };
 
-  const clearAll = () => {
-    setResumeText("");
-    setJobDescription("");
-    setTargetRole("Full Stack Developer");
-    setFileName("");
-    setFileSize("");
-    setResult(null);
-  };
+const clearAll = () => {
+  setResumeText("");
+  setJobDescription("");
+  setTargetRole("Full Stack Developer");
+  setFileName("");
+  setFileSize("");
+  setResumeS3Key("");
+  setResult(null);
+};
 
   const copyResumeText = async () => {
     if (!resumeText.trim()) return;
@@ -460,10 +479,14 @@ ${Array.isArray(result.recommended_roadmap) &&
       <div className="flex justify-center mt-5">
         <button
           onClick={analyzeResume}
-          disabled={loading || fileLoading || !resumeText.trim()}
+          disabled={loading || fileLoading || uploadingToS3 || !resumeText.trim()}
           className="w-full max-w-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 py-3 rounded-lg font-semibold transition"
         >
-          {loading ? "Analyzing Resume..." : "Analyze Resume"}
+          {uploadingToS3
+            ? "Uploading Resume..."
+            : loading
+              ? "Analyzing Resume..."
+              : "Analyze Resume"}
         </button>
       </div>
 
