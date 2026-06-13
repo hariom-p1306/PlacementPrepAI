@@ -1,40 +1,57 @@
-import { currentUser } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
 export async function getCurrentDbUser() {
-  const clerkUser = await currentUser();
+  const { userId } = await auth();
 
-  if (!clerkUser) {
+  if (!userId) {
     return null;
   }
 
-  const email = clerkUser.emailAddresses?.[0]?.emailAddress ?? null;
+  let clerkUser = null;
+
+  try {
+    clerkUser = await currentUser();
+  } catch (error) {
+    console.error("CLERK CURRENT USER ERROR:", error);
+  }
+
+  const email = clerkUser?.emailAddresses?.[0]?.emailAddress ?? null;
+  const name = clerkUser?.fullName ?? clerkUser?.username ?? null;
+
+  const updateData: Prisma.UserUpdateInput = {};
+
+  if (name) {
+    updateData.name = name;
+  }
+
+  if (email) {
+    updateData.email = email;
+  }
 
   try {
     return await prisma.user.upsert({
       where: {
-        clerkId: clerkUser.id,
+        clerkId: userId,
       },
-      update: {
-        name: clerkUser.fullName,
-        email,
-      },
+      update: updateData,
       create: {
-        clerkId: clerkUser.id,
-        name: clerkUser.fullName,
+        clerkId: userId,
+        name,
         email,
       },
     });
   } catch (error) {
-    // Handles race condition when multiple API calls try to create same Clerk user
+    console.error("GET CURRENT DB USER ERROR:", error);
+
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
       return prisma.user.findUnique({
         where: {
-          clerkId: clerkUser.id,
+          clerkId: userId,
         },
       });
     }
