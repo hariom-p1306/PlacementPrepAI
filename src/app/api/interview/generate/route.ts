@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import axios from "axios";
 import { DSA_QUESTIONS } from "@/data/dsaQuestions";
 import { getCurrentDbUser } from "@/lib/user";
+
 import {
   createInterviewSession,
   getUsedQuestions,
 } from "@/lib/interview-history";
+import { rateLimit, tooManyRequestsResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -261,6 +263,17 @@ export async function POST(req: Request) {
         { error: "Unauthorized. Please login first." },
         { status: 401 }
       );
+    }
+
+    const limitResult = await rateLimit({
+      key: `${dbUser.id}:interview-generate`,
+      prefix: "ai-api",
+      limit: 10,
+      windowSeconds: 60,
+    });
+
+    if (!limitResult.success) {
+      return tooManyRequestsResponse(limitResult);
     }
 
     const selectedTopic = interviewType === "DSA" ? topic || "Array" : topic;

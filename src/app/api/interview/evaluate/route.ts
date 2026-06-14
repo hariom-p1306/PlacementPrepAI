@@ -7,6 +7,7 @@ import {
   saveInterviewAnswer,
   saveUsedQuestion,
 } from "@/lib/interview-history";
+import { rateLimit, tooManyRequestsResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -200,6 +201,17 @@ export async function POST(req: Request) {
         { error: "Unauthorized. Please login first." },
         { status: 401 }
       );
+    }
+
+    const limitResult = await rateLimit({
+      key: `${dbUser.id}:interview-evaluate`,
+      prefix: "ai-api",
+      limit: 10,
+      windowSeconds: 60,
+    });
+
+    if (!limitResult.success) {
+      return tooManyRequestsResponse(limitResult);
     }
 
     if (!sessionId) {

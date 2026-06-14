@@ -3,6 +3,7 @@ import axios from "axios";
 import { saveResumeProgress } from "@/lib/progress";
 import { getCurrentDbUser } from "@/lib/user";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, tooManyRequestsResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -186,7 +187,7 @@ function normalizeResult(
 
     role_fit_summary:
       typeof parsed.role_fit_summary === "string" &&
-      parsed.role_fit_summary.trim()
+        parsed.role_fit_summary.trim()
         ? parsed.role_fit_summary.trim()
         : "Role fit summary is not available for this analysis.",
 
@@ -194,8 +195,8 @@ function normalizeResult(
       typeof parsed.ats_note === "string" && parsed.ats_note.trim()
         ? parsed.ats_note.trim()
         : hasJobDescription
-        ? "ATS score is calculated using the provided job description."
-        : "ATS score is estimated because no job description was provided.",
+          ? "ATS score is calculated using the provided job description."
+          : "ATS score is estimated because no job description was provided.",
   };
 }
 
@@ -317,6 +318,17 @@ export async function POST(req: Request) {
     }
 
     dbUserId = dbUser.id;
+
+    const limitResult = await rateLimit({
+      key: `${dbUser.id}:resume-analyze`,
+      prefix: "ai-api",
+      limit: 5,
+      windowSeconds: 300,
+    });
+
+    if (!limitResult.success) {
+      return tooManyRequestsResponse(limitResult);
+    }
 
     const { resumeText, targetRole, jobDescription } = await req.json();
 

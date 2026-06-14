@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import axios from "axios";
+import { rateLimit, tooManyRequestsResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +39,26 @@ For placement preparation, focus daily on DSA, project explanation, CS fundament
 
 export async function POST(req: Request) {
   try {
+    const { userId } = await auth();
+
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      req.headers.get("x-real-ip") ||
+      "anonymous-user";
+
+    const limitKey = userId ? `${userId}:mentor` : `${ip}:mentor`;
+
+    const limitResult = await rateLimit({
+      key: limitKey,
+      prefix: "ai-api",
+      limit: 10,
+      windowSeconds: 60,
+    });
+
+    if (!limitResult.success) {
+      return tooManyRequestsResponse(limitResult);
+    }
+
     const { message } = await req.json();
 
     if (!message || typeof message !== "string") {
